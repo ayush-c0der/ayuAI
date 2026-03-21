@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>AyuAI</title>
+<title>AyuAI Ultimate</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -12,7 +12,8 @@ body{
   font-family:system-ui;
 }
 
-.app{display:flex;height:100vh;}
+/* Layout */
+.app{display:flex;height:100vh}
 
 /* Sidebar */
 .sidebar{
@@ -32,12 +33,7 @@ body{
   cursor:pointer;
 }
 
-/* Chat list */
-.chat-list{
-  margin-top:10px;
-  overflow:auto;
-}
-
+.chat-list{margin-top:10px;overflow:auto}
 .chat-item{
   padding:8px;
   background:#111;
@@ -47,7 +43,7 @@ body{
 }
 
 /* Chat */
-.chat{flex:1;display:flex;flex-direction:column;}
+.chat{flex:1;display:flex;flex-direction:column}
 
 .topbar{
   display:flex;
@@ -73,10 +69,23 @@ body{
   margin:auto;
   padding:15px;
   border-radius:10px;
+  line-height:1.6;
 }
 
-.user-msg{background:#444654;}
-.bot-msg{background:#343541;}
+.user-msg{background:#444654}
+.bot-msg{background:#343541}
+
+/* Typing indicator */
+.typing{
+  font-size:20px;
+  opacity:0.7;
+  animation:blink 1s infinite;
+}
+@keyframes blink{
+  0%{opacity:0.2}
+  50%{opacity:1}
+  100%{opacity:0.2}
+}
 
 /* Input */
 .input-box{
@@ -104,7 +113,12 @@ button{
   cursor:pointer;
 }
 
-.mic{background:#ef4444;}
+.mic{background:#ef4444}
+
+/* Mobile */
+@media(max-width:768px){
+  .sidebar{display:none}
+}
 </style>
 </head>
 
@@ -140,15 +154,16 @@ let history=[];
 let chats=[];
 let currentChatIndex=-1;
 let mode="efficient";
+let userName=null;
 
-/* MODE SWITCH */
+/* MODE */
 function changeMode(){
-  if(mode==="efficient"){mode="smart";updateMode("🧠 Smart");}
-  else if(mode==="smart"){mode="assistant";updateMode("🎤 Assistant");startAssistant();}
-  else{mode="efficient";updateMode("⚡ Efficient");}
+  if(mode==="efficient"){mode="smart";update("🧠 Smart")}
+  else if(mode==="smart"){mode="assistant";update("🎤 Assistant");startAssistant()}
+  else{mode="efficient";update("⚡ Efficient")}
 }
 
-function updateMode(text){
+function update(text){
   document.getElementById("modeBtn").innerText=text;
 }
 
@@ -163,6 +178,8 @@ async function send(textFromVoice=null){
 
   history.push({role:"user",content:text});
 
+  showTyping();
+
   try{
     const res=await fetch("/chat",{
       method:"POST",
@@ -172,14 +189,29 @@ async function send(textFromVoice=null){
 
     const data=await res.json();
 
-    history.push({role:"assistant",content:data.reply});
+    removeTyping();
 
-    addMessage(data.reply,"bot-msg",true);
-    speak(data.reply);
+    let reply=data.reply;
+
+    // 🧠 MEMORY
+    if(text.toLowerCase().includes("my name is")){
+      userName=text.split("is")[1].trim();
+      reply="Nice to meet you "+userName+" 😊";
+    }
+
+    if(userName && reply.includes("Hello")){
+      reply=reply.replace("Hello","Hello "+userName);
+    }
+
+    history.push({role:"assistant",content:reply});
+
+    addMessage(reply,"bot-msg",true);
+    speak(reply);
 
     saveChat();
 
   }catch{
+    removeTyping();
     addMessage("⚠️ Error","bot-msg");
   }
 }
@@ -194,17 +226,29 @@ function addMessage(text,type,typing=false){
 
   if(typing){
     let i=0;
-    function type(){
+    function typeAnim(){
       if(i<text.length){
         div.innerText+=text[i++];
         box.scrollTop=box.scrollHeight;
-        setTimeout(type,8);
+        setTimeout(typeAnim,8);
       }
     }
-    type();
+    typeAnim();
   }else div.innerText=text;
 
   box.scrollTop=box.scrollHeight;
+}
+
+/* TYPING */
+let typingDiv=null;
+function showTyping(){
+  typingDiv=document.createElement("div");
+  typingDiv.className="msg bot-msg typing";
+  typingDiv.innerText="...";
+  document.getElementById("messages").appendChild(typingDiv);
+}
+function removeTyping(){
+  if(typingDiv) typingDiv.remove();
 }
 
 /* ENTER */
@@ -291,4 +335,4 @@ function speak(text){
 </script>
 
 </body>
-</html>s
+</html>
