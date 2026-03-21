@@ -3,19 +3,17 @@
 <head>
 <title>AyuAI</title>
 
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
 body {
   margin:0;
   background:#0f172a;
   color:white;
   font-family:system-ui;
-  transition:0.3s;
 }
 
-body.smart {
-  background:#020617;
-}
-
+/* Layout */
 .app {
   display:flex;
   height:100vh;
@@ -31,29 +29,11 @@ body.smart {
 .new-btn {
   width:100%;
   padding:10px;
-  margin-bottom:10px;
   background:#1e293b;
   border:none;
   color:white;
   border-radius:8px;
   cursor:pointer;
-}
-
-/* 🔥 Chat List */
-.chat-list {
-  margin-top:10px;
-}
-
-.chat-item {
-  background:#111827;
-  padding:10px;
-  border-radius:8px;
-  margin-bottom:6px;
-  cursor:pointer;
-}
-
-.chat-item:hover {
-  background:#1e293b;
 }
 
 /* Chat */
@@ -72,7 +52,6 @@ body.smart {
   background:#020617;
 }
 
-/* Logo */
 .logo {
   display:flex;
   align-items:center;
@@ -81,12 +60,15 @@ body.smart {
 
 .logo img {
   width:35px;
-  height:35px;
 }
 
 /* Dropdown */
 .dropdown {
   position:relative;
+}
+
+#ai-name {
+  cursor:pointer;
 }
 
 .menu {
@@ -95,24 +77,34 @@ body.smart {
   right:0;
   top:30px;
   background:#111827;
-  padding:10px;
   border-radius:8px;
+  padding:10px;
+}
+
+.menu div {
+  padding:8px;
+  cursor:pointer;
+}
+
+.menu div:hover {
+  background:#1e293b;
 }
 
 /* Messages */
 #messages {
   flex:1;
-  padding:30px;
-  overflow-y:auto;
+  padding:20px;
   display:flex;
   flex-direction:column;
-  gap:20px;
+  gap:15px;
+  overflow-y:auto;
 }
 
 .msg {
-  padding:14px;
+  padding:14px 18px;
   border-radius:16px;
-  max-width:65%;
+  max-width:70%;
+  line-height:1.6;
   white-space:pre-wrap;
 }
 
@@ -128,43 +120,56 @@ body.smart {
 /* Input */
 .input-box {
   display:flex;
-  padding:15px;
+  padding:10px;
   background:#020617;
 }
 
-input {
+.input-box input {
   flex:1;
-  padding:14px;
+  padding:12px;
   border:none;
-  border-radius:12px;
+  border-radius:10px;
   background:#111827;
   color:white;
 }
 
-button {
+.input-box button {
   margin-left:10px;
-  padding:14px;
+  padding:12px;
   border:none;
-  border-radius:12px;
+  border-radius:10px;
   background:#2563eb;
   color:white;
+  cursor:pointer;
+}
+
+/* 📱 MOBILE */
+@media (max-width:768px){
+  .sidebar {
+    display:none;
+  }
+
+  .msg {
+    max-width:90%;
+  }
 }
 </style>
 
 </head>
-<body>
+
+<body class="efficient">
 
 <div class="app">
 
 <!-- Sidebar -->
 <div class="sidebar">
   <button class="new-btn" onclick="newChat()">+ New Chat</button>
-  <div id="chat-list" class="chat-list"></div>
 </div>
 
 <!-- Chat -->
 <div class="chat">
 
+  <!-- Topbar -->
   <div class="topbar">
     <div class="logo">
       <img src="logo.png">
@@ -172,7 +177,7 @@ button {
     </div>
 
     <div class="dropdown">
-      <span onclick="toggleMenu()" id="ai-name">⚡ Efficient ▼</span>
+      <span id="ai-name" onclick="toggleMenu()">⚡ Efficient ▼</span>
 
       <div id="menu" class="menu">
         <div onclick="setMode('efficient')">⚡ Efficient</div>
@@ -181,54 +186,51 @@ button {
     </div>
   </div>
 
+  <!-- Messages -->
   <div id="messages"></div>
 
+  <!-- Input -->
   <div class="input-box">
     <input id="input" placeholder="Message AyuAI...">
     <button onclick="send()">➤</button>
   </div>
 
 </div>
-
 </div>
 
 <script>
 let history = [];
-let chats = [];
-let currentChatIndex = -1;
 let currentMode = "efficient";
 
 /* MENU */
-function toggleMenu() {
+function toggleMenu(){
   const m = document.getElementById("menu");
   m.style.display = m.style.display === "block" ? "none" : "block";
 }
 
 /* MODE */
-function setMode(mode) {
+function setMode(mode){
   currentMode = mode;
-
   document.body.className = mode;
 
   document.getElementById("menu").style.display = "none";
-
   document.getElementById("ai-name").innerText =
     mode === "smart" ? "🧠 Smart ▼" : "⚡ Efficient ▼";
 }
 
 /* SEND */
-async function send() {
+async function send(){
   const input = document.getElementById("input");
   const text = input.value.trim();
-  if (!text) return;
+  if(!text) return;
 
-  addMessage(text, "user-msg");
-  input.value = "";
+  addMessage(text,"user-msg");
+  input.value="";
 
-  history.push({ role:"user", content:text });
+  history.push({role:"user",content:text});
 
-  try {
-    const res = await fetch("/chat", {
+  try{
+    const res = await fetch("/chat",{
       method:"POST",
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({
@@ -240,78 +242,51 @@ async function send() {
 
     const data = await res.json();
 
-    history.push({ role:"assistant", content:data.reply });
+    history.push({role:"assistant",content:data.reply});
 
-    addMessage(data.reply, "bot-msg");
+    addMessage(data.reply,"bot-msg",true);
 
-    saveChat(); // 🔥 IMPORTANT
-
-  } catch {
-    addMessage("⚠️ Error", "bot-msg");
+  }catch{
+    addMessage("⚠️ Error","bot-msg");
   }
 }
 
-/* MESSAGE */
-function addMessage(text,type) {
+/* MESSAGE WITH TYPING */
+function addMessage(text,type,typing=false){
   const div = document.createElement("div");
   div.className = "msg " + type;
-  div.innerText = text;
 
   document.getElementById("messages").appendChild(div);
 
   const box = document.getElementById("messages");
+
+  if(typing){
+    let i=0;
+    function typeEffect(){
+      if(i < text.length){
+        div.innerText += text.charAt(i);
+        i++;
+        box.scrollTop = box.scrollHeight;
+        setTimeout(typeEffect,15);
+      }
+    }
+    typeEffect();
+  } else {
+    div.innerText = text;
+  }
+
   box.scrollTop = box.scrollHeight;
 }
 
-/* ENTER */
+/* ENTER KEY */
 document.getElementById("input").addEventListener("keydown", e=>{
   if(e.key==="Enter") send();
 });
 
-/* SAVE CHAT (RAM ONLY) */
-function saveChat() {
-  if (currentChatIndex === -1) {
-    chats.push([...history]);
-    currentChatIndex = chats.length - 1;
-  } else {
-    chats[currentChatIndex] = [...history];
-  }
-  renderChatList();
-}
-
-/* SHOW CHAT LIST */
-function renderChatList() {
-  const list = document.getElementById("chat-list");
-  list.innerHTML = "";
-
-  chats.forEach((chat, i) => {
-    const item = document.createElement("div");
-    item.className = "chat-item";
-    item.innerText = chat[0]?.content?.slice(0, 20) || "New Chat";
-
-    item.onclick = () => loadChat(i);
-
-    list.appendChild(item);
-  });
-}
-
-/* LOAD CHAT */
-function loadChat(i) {
-  history = [...chats[i]];
-  currentChatIndex = i;
-
-  document.getElementById("messages").innerHTML = "";
-
-  history.forEach(m => {
-    addMessage(m.content, m.role === "user" ? "user-msg" : "bot-msg");
-  });
-}
-
 /* NEW CHAT */
-function newChat() {
+function newChat(){
   history = [];
-  currentChatIndex = -1;
-  document.getElementById("messages").innerHTML = "";
+  document.getElementById("messages").innerHTML="";
 }
 </script>
 
