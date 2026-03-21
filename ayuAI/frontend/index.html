@@ -8,7 +8,7 @@
 <style>
 body {
   margin:0;
-  background:#0f172a;
+  background:#343541;
   color:white;
   font-family:system-ui;
 }
@@ -22,43 +22,18 @@ body {
 /* Sidebar */
 .sidebar {
   width:260px;
-  background:#020617;
+  background:#202123;
   padding:15px;
-  display:flex;
-  flex-direction:column;
 }
 
 .new-btn {
+  width:100%;
   padding:10px;
-  background:#1e293b;
-  border:none;
+  background:#343541;
+  border:1px solid #555;
   color:white;
   border-radius:8px;
   cursor:pointer;
-  margin-bottom:10px;
-}
-
-.new-btn:hover {
-  background:#334155;
-}
-
-/* Chat history */
-.chat-list {
-  flex:1;
-  overflow-y:auto;
-}
-
-.chat-item {
-  background:#111827;
-  padding:10px;
-  border-radius:8px;
-  margin-bottom:6px;
-  cursor:pointer;
-  font-size:14px;
-}
-
-.chat-item:hover {
-  background:#1e293b;
 }
 
 /* Chat */
@@ -70,103 +45,73 @@ body {
 
 /* Topbar */
 .topbar {
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:12px 20px;
-  border-bottom:1px solid #1e293b;
-  background:#020617;
-}
-
-.logo {
-  display:flex;
-  align-items:center;
-  gap:10px;
-}
-
-.logo img {
-  width:35px;
-}
-
-/* Dropdown */
-.dropdown {
-  position:relative;
-}
-
-#ai-name {
-  cursor:pointer;
-}
-
-.menu {
-  display:none;
-  position:absolute;
-  right:0;
-  top:30px;
-  background:#111827;
-  border-radius:8px;
-  padding:10px;
-}
-
-.menu div {
-  padding:8px;
-  cursor:pointer;
-}
-
-.menu div:hover {
-  background:#1e293b;
+  padding:12px;
+  border-bottom:1px solid #444;
+  text-align:center;
+  font-weight:bold;
 }
 
 /* Messages */
 #messages {
   flex:1;
   padding:20px;
+  overflow-y:auto;
   display:flex;
   flex-direction:column;
-  gap:15px;
-  overflow-y:auto;
+  gap:20px;
 }
 
 .msg {
-  padding:14px 18px;
-  border-radius:16px;
-  max-width:70%;
+  max-width:800px;
+  width:100%;
+  margin:auto;
+  padding:15px;
+  border-radius:10px;
   line-height:1.6;
-  white-space:pre-wrap;
 }
 
 .user-msg {
-  background:#2563eb;
-  align-self:flex-end;
+  background:#444654;
 }
 
 .bot-msg {
-  background:#1e293b;
+  background:#343541;
 }
 
 /* Input */
 .input-box {
   display:flex;
-  padding:10px;
-  background:#020617;
+  padding:15px;
+  background:#40414f;
 }
 
 .input-box input {
   flex:1;
   padding:12px;
   border:none;
-  border-radius:10px;
-  background:#111827;
+  border-radius:8px;
+  background:#343541;
   color:white;
 }
 
-.input-box button {
+/* Buttons */
+button {
   margin-left:10px;
-  padding:12px;
+  padding:10px;
   border:none;
-  border-radius:10px;
-  background:#2563eb;
+  border-radius:8px;
+  background:#10a37f;
   color:white;
   cursor:pointer;
+}
+
+button:hover {
+  opacity:0.8;
+}
+
+/* Mic button */
+.mic {
+  background:#ef4444;
 }
 
 /* Mobile */
@@ -174,58 +119,31 @@ body {
   .sidebar {
     display:none;
   }
-  .msg {
-    max-width:90%;
-  }
 }
 </style>
 
 </head>
 
-<body class="efficient">
+<body>
 
 <div class="app">
 
 <!-- Sidebar -->
 <div class="sidebar">
-
   <button class="new-btn" onclick="newChat()">+ New Chat</button>
-
-  <!-- 🔥 Chat History -->
-  <div id="chat-list" class="chat-list"></div>
-
 </div>
 
 <!-- Chat -->
 <div class="chat">
 
-  <!-- Topbar -->
-  <div class="topbar">
-    <div class="logo">
-      <img src="logo.png">
-      <div>
-        <div>AyuAI</div>
-        <small style="color:#94a3b8">Made by Abhay Pratap</small>
-      </div>
-    </div>
+  <div class="topbar">AyuAI 🤖</div>
 
-    <div class="dropdown">
-      <span id="ai-name" onclick="toggleMenu()">⚡ Efficient ▼</span>
-
-      <div id="menu" class="menu">
-        <div onclick="setMode('efficient')">⚡ Efficient</div>
-        <div onclick="setMode('smart')">🧠 Smart</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Messages -->
   <div id="messages"></div>
 
-  <!-- Input -->
   <div class="input-box">
     <input id="input" placeholder="Message AyuAI...">
-    <button onclick="send()">➤</button>
+    <button onclick="send()">Send</button>
+    <button class="mic" onclick="startVoice()">🎤</button>
   </div>
 
 </div>
@@ -233,25 +151,6 @@ body {
 
 <script>
 let history = [];
-let chats = [];
-let currentChatIndex = -1;
-let currentMode = "efficient";
-
-/* MENU */
-function toggleMenu(){
-  const m = document.getElementById("menu");
-  m.style.display = m.style.display === "block" ? "none" : "block";
-}
-
-/* MODE */
-function setMode(mode){
-  currentMode = mode;
-  document.body.className = mode;
-
-  document.getElementById("menu").style.display = "none";
-  document.getElementById("ai-name").innerText =
-    mode === "smart" ? "🧠 Smart ▼" : "⚡ Efficient ▼";
-}
 
 /* SEND */
 async function send(){
@@ -270,7 +169,7 @@ async function send(){
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({
         message:text,
-        mode:currentMode,
+        mode:"efficient",
         history:history
       })
     });
@@ -280,8 +179,6 @@ async function send(){
     history.push({role:"assistant",content:data.reply});
 
     addMessage(data.reply,"bot-msg",true);
-
-    saveChat();
 
   }catch{
     addMessage("⚠️ Error","bot-msg");
@@ -304,7 +201,7 @@ function addMessage(text,type,typing=false){
         div.innerText += text.charAt(i);
         i++;
         box.scrollTop = box.scrollHeight;
-        setTimeout(typeEffect,10);
+        setTimeout(typeEffect,8);
       }
     }
     typeEffect();
@@ -320,51 +217,32 @@ document.getElementById("input").addEventListener("keydown", e=>{
   if(e.key==="Enter") send();
 });
 
-/* SAVE CHAT */
-function saveChat(){
-  if(currentChatIndex === -1){
-    chats.push([...history]);
-    currentChatIndex = chats.length - 1;
-  } else {
-    chats[currentChatIndex] = [...history];
-  }
-  renderChatList();
-}
-
-/* SHOW CHAT LIST */
-function renderChatList(){
-  const list = document.getElementById("chat-list");
-  list.innerHTML = "";
-
-  chats.forEach((chat,i)=>{
-    const item = document.createElement("div");
-    item.className = "chat-item";
-    item.innerText = chat[0]?.content?.slice(0,25) || "New Chat";
-    item.onclick = ()=>loadChat(i);
-    list.appendChild(item);
-  });
-}
-
-/* LOAD CHAT */
-function loadChat(i){
-  history = [...chats[i]];
-  currentChatIndex = i;
-
-  const box = document.getElementById("messages");
-  box.innerHTML = "";
-
-  history.forEach(m=>{
-    addMessage(m.content,
-      m.role==="user"?"user-msg":"bot-msg"
-    );
-  });
-}
-
 /* NEW CHAT */
 function newChat(){
   history = [];
-  currentChatIndex = -1;
   document.getElementById("messages").innerHTML="";
+}
+
+/* 🎤 VOICE INPUT */
+function startVoice(){
+  if(!('webkitSpeechRecognition' in window)){
+    alert("Voice not supported in this browser");
+    return;
+  }
+
+  const recognition = new webkitSpeechRecognition();
+  recognition.lang = "en-US";
+
+  recognition.onstart = () => {
+    console.log("🎤 Listening...");
+  };
+
+  recognition.onresult = (event) => {
+    const text = event.results[0][0].transcript;
+    document.getElementById("input").value = text;
+  };
+
+  recognition.start();
 }
 </script>
 
