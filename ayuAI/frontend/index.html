@@ -180,6 +180,8 @@ async function send(){
 
     addMessage(data.reply,"bot-msg",true);
 
+    speak(data.reply); // 🔥 VOICE OUTPUT
+
   }catch{
     addMessage("⚠️ Error","bot-msg");
   }
@@ -226,16 +228,12 @@ function newChat(){
 /* 🎤 VOICE INPUT */
 function startVoice(){
   if(!('webkitSpeechRecognition' in window)){
-    alert("Voice not supported in this browser");
+    alert("Voice not supported");
     return;
   }
 
   const recognition = new webkitSpeechRecognition();
   recognition.lang = "en-US";
-
-  recognition.onstart = () => {
-    console.log("🎤 Listening...");
-  };
 
   recognition.onresult = (event) => {
     const text = event.results[0][0].transcript;
@@ -243,6 +241,22 @@ function startVoice(){
   };
 
   recognition.start();
+}
+
+/* 🔊 AI SPEAK */
+function speak(text){
+  const speech = new SpeechSynthesisUtterance(text);
+
+  speech.rate = 1;     // speed
+  speech.pitch = 1;    // voice tone
+  speech.volume = 1;
+
+  // Optional: choose better voice
+  const voices = speechSynthesis.getVoices();
+  speech.voice = voices.find(v => v.name.includes("Google")) || voices[0];
+
+  speechSynthesis.cancel(); // stop previous speech
+  speechSynthesis.speak(speech);
 }
 </script>
 
