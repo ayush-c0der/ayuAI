@@ -11,8 +11,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// serve frontend
-app.use(express.static(path.join(__dirname, "frontend")));
+// ✅ FIXED PATH (VERY IMPORTANT)
+app.use(express.static(path.join(__dirname, "../frontend")));
 
 /* ---------------- SYSTEM PROMPT ---------------- */
 
@@ -109,8 +109,9 @@ async function multiMode(history, api) {
 
 /* ---------------- ROUTES ---------------- */
 
+// ✅ FIXED: serve frontend homepage
 app.get("/", (req, res) => {
-  res.send("AyuAI Server Running 🚀");
+  res.sendFile(path.join(__dirname, "../frontend/index.html"));
 });
 
 app.post("/chat", async (req, res) => {
@@ -137,7 +138,6 @@ app.post("/chat", async (req, res) => {
 
 /* ---------------- START SERVER ---------------- */
 
-// ✅ ONLY ONE PORT (FIXED)
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
