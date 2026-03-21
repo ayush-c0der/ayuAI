@@ -83,7 +83,7 @@ body {
   border-radius:10px;
   line-height:1.6;
   white-space:pre-wrap;
-  word-spacing: 2px; /* FIX spacing */
+  word-spacing:2px;
 }
 
 .user-msg { background:#444654; }
@@ -117,7 +117,6 @@ button {
 }
 
 .mic { background:#ef4444; }
-.assistant { background:#9333ea; }
 
 /* Footer */
 .footer {
@@ -160,7 +159,6 @@ button {
     <div>
       <button onclick="setMode('efficient')">⚡</button>
       <button onclick="setMode('smart')">🧠</button>
-      <button onclick="startAssistant()" class="assistant">🎧</button>
     </div>
   </div>
 
@@ -177,17 +175,12 @@ button {
 
 <script>
 let history = [];
-let memory = []; // 🔥 persistent memory
+let memory = [];
 let currentMode = "efficient";
 
 /* MODE */
 function setMode(mode){
   currentMode = mode;
-}
-
-/* CLEAN TEXT (remove emoji for voice) */
-function cleanText(text){
-  return text.replace(/[\u{1F600}-\u{1F6FF}]/gu, '');
 }
 
 /* SEND */
@@ -200,7 +193,7 @@ async function send(){
   input.value="";
 
   history.push({role:"user",content:text});
-  memory.push({role:"user",content:text}); // 🔥 save memory
+  memory.push({role:"user",content:text});
 
   try{
     const res = await fetch("/chat",{
@@ -209,7 +202,7 @@ async function send(){
       body: JSON.stringify({
         message:text,
         mode:currentMode,
-        history:[...memory] // 🔥 use memory always
+        history:[...memory]
       })
     });
 
@@ -219,8 +212,6 @@ async function send(){
     memory.push({role:"assistant",content:data.reply});
 
     addMessage(data.reply,"bot-msg",true);
-
-    speak(cleanText(data.reply)); // 🔥 FIX voice emoji
 
   }catch{
     addMessage("⚠️ Error","bot-msg");
@@ -259,69 +250,25 @@ document.getElementById("input").addEventListener("keydown", e=>{
   if(e.key==="Enter") send();
 });
 
-/* VOICE INPUT */
+/* 🎤 VOICE INPUT ONLY (NO AI SPEAK) */
 function startVoice(){
-  const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  if(!('webkitSpeechRecognition' in window)){
+    alert("Voice not supported");
+    return;
+  }
+
+  const rec = new webkitSpeechRecognition();
   rec.lang="en-US";
 
   rec.onresult = (e)=>{
-    document.getElementById("input").value = e.results[0][0].transcript;
+    document.getElementById("input").value =
+      e.results[0][0].transcript;
   };
 
   rec.start();
 }
 
-/* BETTER VOICE */
-function speak(text){
-  const speech = new SpeechSynthesisUtterance(text);
-
-  const voices = speechSynthesis.getVoices();
-
-  speech.voice =
-    voices.find(v => v.name.includes("Google UK Female")) ||
-    voices.find(v => v.name.includes("Female")) ||
-    voices[0];
-
-  speech.rate = 0.95;
-  speech.pitch = 1;
-
-  speechSynthesis.cancel();
-  speechSynthesis.speak(speech);
-}
-
-/* 🎧 FULL ASSISTANT MODE */
-function startAssistant(){
-  const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-  rec.continuous = true;
-  rec.lang="en-US";
-
-  rec.onresult = async (e)=>{
-    const text = e.results[e.results.length-1][0].transcript;
-
-    addMessage(text,"user-msg");
-
-    memory.push({role:"user",content:text});
-
-    const res = await fetch("/chat",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({
-        message:text,
-        mode:currentMode,
-        history:memory
-      })
-    });
-
-    const data = await res.json();
-
-    addMessage(data.reply,"bot-msg",true);
-    speak(cleanText(data.reply));
-  };
-
-  rec.start();
-}
-
-/* NEW CHAT (memory NOT cleared 🔥) */
+/* NEW CHAT (memory stays) */
 function newChat(){
   history = [];
   document.getElementById("messages").innerHTML="";
