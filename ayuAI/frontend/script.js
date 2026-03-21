@@ -3,10 +3,6 @@ let chats = [];
 let currentChatIndex = -1;
 let currentMode = "efficient";
 
-/* 🎤 Assistant control */
-let assistantActive = false;
-let recognition;
-
 /* MODE */
 function setMode(mode) {
   currentMode = mode;
@@ -14,14 +10,12 @@ function setMode(mode) {
   document.body.classList.remove("smart","efficient");
   document.body.classList.add(mode);
 
-  // 🔥 stop assistant when switching mode
-  assistantActive = false;
-  if (recognition) recognition.stop();
+  document.getElementById("menu")?.style && (document.getElementById("menu").style.display = "none");
 
-  document.getElementById("menu").style.display = "none";
-
-  document.getElementById("ai-name").innerText =
-    mode === "smart" ? "🧠 Smart ▼" : "⚡ Efficient ▼";
+  const name = document.getElementById("ai-name");
+  if (name) {
+    name.innerText = mode === "smart" ? "🧠 Smart ▼" : "⚡ Efficient ▼";
+  }
 }
 
 /* SEND */
@@ -52,8 +46,6 @@ async function send() {
 
     addMessage(data.reply, "bot-msg", true);
 
-    speak(data.reply); // 🔥 voice reply
-
     saveChat();
 
   } catch {
@@ -61,7 +53,7 @@ async function send() {
   }
 }
 
-/* MESSAGE UI (WITH TYPING EFFECT) */
+/* MESSAGE UI (TYPING EFFECT) */
 function addMessage(text, type, typing=false) {
   const div = document.createElement("div");
   div.className = "msg " + type;
@@ -88,92 +80,30 @@ function addMessage(text, type, typing=false) {
   box.scrollTop = box.scrollHeight;
 }
 
-/* 🔊 BETTER VOICE */
-function speak(text) {
-  // ❌ remove emojis
-  const clean = text.replace(/[^\p{L}\p{N}\p{P}\p{Z}]/gu, '');
-
-  const speech = new SpeechSynthesisUtterance(clean);
-  const voices = speechSynthesis.getVoices();
-
-  speech.voice =
-    voices.find(v => v.name.includes("Google UK English Female")) ||
-    voices.find(v => v.name.includes("Google US English")) ||
-    voices.find(v => v.name.includes("Female")) ||
-    voices[0];
-
-  speech.rate = 0.95;
-  speech.pitch = 1;
-
-  speechSynthesis.cancel();
-  speechSynthesis.speak(speech);
-}
-
-/* 🎤 VOICE INPUT */
+/* 🎤 VOICE INPUT (ONLY FILL INPUT, NO AUTO SEND) */
 function startVoice() {
-  const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  if (!('webkitSpeechRecognition' in window)) {
+    alert("Voice not supported");
+    return;
+  }
+
+  const rec = new webkitSpeechRecognition();
   rec.lang = "en-US";
 
   rec.onresult = (e) => {
-    document.getElementById("input").value = e.results[0][0].transcript;
+    document.getElementById("input").value =
+      e.results[0][0].transcript;
   };
 
   rec.start();
 }
 
-/* 🎧 ASSISTANT MODE (FIXED) */
-function startAssistant() {
-
-  // toggle OFF
-  if (assistantActive) {
-    assistantActive = false;
-    if (recognition) recognition.stop();
-    return;
-  }
-
-  assistantActive = true;
-
-  recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-  recognition.continuous = true;
-  recognition.lang = "en-US";
-
-  recognition.onresult = async (e) => {
-    if (!assistantActive) return;
-
-    const text = e.results[e.results.length-1][0].transcript;
-
-    addMessage(text, "user-msg");
-    history.push({ role:"user", content:text });
-
-    const res = await fetch("/chat", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({
-        message:text,
-        mode:currentMode,
-        history:history
-      })
-    });
-
-    const data = await res.json();
-
-    history.push({ role:"assistant", content:data.reply });
-
-    addMessage(data.reply, "bot-msg", true);
-    speak(data.reply);
-
-    saveChat();
-  };
-
-  recognition.start();
-}
-
-/* ENTER */
+/* ENTER KEY */
 document.getElementById("input").addEventListener("keydown", e=>{
   if(e.key==="Enter") send();
 });
 
-/* SAVE CHAT IN RAM */
+/* SAVE CHAT */
 function saveChat() {
   if (currentChatIndex === -1) {
     chats.push([...history]);
@@ -220,5 +150,6 @@ function loadChat(i) {
 function newChat() {
   history = [];
   currentChatIndex = -1;
+
   document.getElementById("messages").innerHTML = "";
 }
