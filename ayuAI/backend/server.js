@@ -1,332 +1,168 @@
-<!DOCTYPE html>
-<html>
-<head>
-<title>AyuAI</title>
+const express = require("express");
+const axios = require("axios");
+const cors = require("cors");
+const path = require("path");
+require("dotenv").config();
 
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+const app = express();
 
-<style>
-body {
-  margin:0;
-  background:#343541;
-  color:white;
-  font-family:system-ui;
-}
+/* ---------------- MIDDLEWARE ---------------- */
+app.use(cors());
+app.use(express.json());
 
-/* Layout */
-.app { display:flex; height:100vh; }
+// ✅ serve frontend (IMPORTANT)
+app.use(express.static(path.join(__dirname, "frontend")));
 
-/* Sidebar */
-.sidebar {
-  width:260px;
-  background:#202123;
-  padding:15px;
-  display:flex;
-  flex-direction:column;
-  justify-content:space-between;
-}
+/* ---------------- SYSTEM PROMPT ---------------- */
 
-.new-btn {
-  width:100%;
-  padding:10px;
-  background:#343541;
-  border:1px solid #555;
-  color:white;
-  border-radius:8px;
-  cursor:pointer;
-}
+const SYSTEM_PROMPT = {
+  role: "system",
+  content: `
+You are Ayu AI 🤖, a highly intelligent assistant made by Abhay Pratap.
 
-/* Chat */
-.chat {
-  flex:1;
-  display:flex;
-  flex-direction:column;
-}
+Rules:
+- Give detailed and well-explained answers
+- Use a natural, human tone
+- Use emojis when helpful 😊
+- Break answers into clean paragraphs
+- For complex questions, explain step-by-step
+- Avoid very short answers
+- Be engaging and helpful
+`
+};
 
-/* Topbar */
-.topbar {
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:12px;
-  border-bottom:1px solid #444;
-}
+/* ---------------- API CALLS ---------------- */
 
-/* Logo */
-.logo {
-  display:flex;
-  align-items:center;
-  gap:10px;
-}
+// 🔵 OpenRouter
+async function openrouter(history) {
+  const res = await axios.post(
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+      model: "openai/gpt-4o-mini",
+      max_tokens: 1200,
+      temperature: 0.7,
+      messages: [SYSTEM_PROMPT, ...history]
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
 
-.logo img {
-  width:35px;
-  height:35px;
-  border-radius:6px;
-}
-
-/* Messages */
-#messages {
-  flex:1;
-  padding:20px;
-  overflow-y:auto;
-  display:flex;
-  flex-direction:column;
-  gap:18px;
-}
-
-.msg {
-  max-width:800px;
-  width:100%;
-  margin:auto;
-  padding:15px;
-  border-radius:10px;
-  line-height:1.6;
-  white-space:pre-wrap;
-  word-spacing: 2px; /* FIX spacing */
-}
-
-.user-msg { background:#444654; }
-.bot-msg { background:#343541; }
-
-/* Input */
-.input-box {
-  display:flex;
-  padding:15px;
-  background:#40414f;
-}
-
-.input-box input {
-  flex:1;
-  padding:12px;
-  border:none;
-  border-radius:8px;
-  background:#343541;
-  color:white;
-}
-
-/* Buttons */
-button {
-  margin-left:10px;
-  padding:10px;
-  border:none;
-  border-radius:8px;
-  background:#10a37f;
-  color:white;
-  cursor:pointer;
-}
-
-.mic { background:#ef4444; }
-.assistant { background:#9333ea; }
-
-/* Footer */
-.footer {
-  font-size:12px;
-  text-align:center;
-  opacity:0.6;
-}
-
-/* Mobile */
-@media (max-width:768px){
-  .sidebar { display:none; }
-}
-</style>
-</head>
-
-<body>
-
-<div class="app">
-
-<!-- Sidebar -->
-<div class="sidebar">
-  <div>
-    <button class="new-btn" onclick="newChat()">+ New Chat</button>
-  </div>
-
-  <div class="footer">
-    Made by Abhay Pratap 🚀
-  </div>
-</div>
-
-<!-- Chat -->
-<div class="chat">
-
-  <div class="topbar">
-    <div class="logo">
-      <img src="logo.png">
-      <span>AyuAI 🤖</span>
-    </div>
-
-    <div>
-      <button onclick="setMode('efficient')">⚡</button>
-      <button onclick="setMode('smart')">🧠</button>
-      <button onclick="startAssistant()" class="assistant">🎧</button>
-    </div>
-  </div>
-
-  <div id="messages"></div>
-
-  <div class="input-box">
-    <input id="input" placeholder="Message AyuAI...">
-    <button onclick="send()">Send</button>
-    <button class="mic" onclick="startVoice()">🎤</button>
-  </div>
-
-</div>
-</div>
-
-<script>
-let history = [];
-let memory = []; // 🔥 persistent memory
-let currentMode = "efficient";
-
-/* MODE */
-function setMode(mode){
-  currentMode = mode;
-}
-
-/* CLEAN TEXT (remove emoji for voice) */
-function cleanText(text){
-  return text.replace(/[\u{1F600}-\u{1F6FF}]/gu, '');
-}
-
-/* SEND */
-async function send(){
-  const input = document.getElementById("input");
-  const text = input.value.trim();
-  if(!text) return;
-
-  addMessage(text,"user-msg");
-  input.value="";
-
-  history.push({role:"user",content:text});
-  memory.push({role:"user",content:text}); // 🔥 save memory
-
-  try{
-    const res = await fetch("/chat",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({
-        message:text,
-        mode:currentMode,
-        history:[...memory] // 🔥 use memory always
-      })
-    });
-
-    const data = await res.json();
-
-    history.push({role:"assistant",content:data.reply});
-    memory.push({role:"assistant",content:data.reply});
-
-    addMessage(data.reply,"bot-msg",true);
-
-    speak(cleanText(data.reply)); // 🔥 FIX voice emoji
-
-  }catch{
-    addMessage("⚠️ Error","bot-msg");
-  }
-}
-
-/* MESSAGE with typing */
-function addMessage(text,type,typing=false){
-  const div = document.createElement("div");
-  div.className = "msg " + type;
-
-  document.getElementById("messages").appendChild(div);
-
-  const box = document.getElementById("messages");
-
-  if(typing){
-    let i=0;
-    function typeEffect(){
-      if(i < text.length){
-        div.innerText += text.charAt(i);
-        i++;
-        box.scrollTop = box.scrollHeight;
-        setTimeout(typeEffect,10);
+        // ✅ FIXED (YOUR REAL LINK)
+        "HTTP-Referer": "https://ayuai.onrender.com",
+        "X-Title": "AyuAI"
       }
     }
-    typeEffect();
-  } else {
-    div.innerText = text;
+  );
+
+  return res.data.choices[0].message.content;
+}
+
+// 🟢 Groq
+async function groq(history) {
+  const res = await axios.post(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+      model: "llama3-70b-8192",
+      max_tokens: 1200,
+      temperature: 0.7,
+      messages: [SYSTEM_PROMPT, ...history]
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`
+      }
+    }
+  );
+
+  return res.data.choices[0].message.content;
+}
+
+/* ---------------- MODES ---------------- */
+
+// ⚡ Efficient
+async function efficientMode(history) {
+  try {
+    return await groq(history);
+  } catch (e) {
+    console.log("Groq failed");
   }
 
-  box.scrollTop = box.scrollHeight;
+  try {
+    return await openrouter(history);
+  } catch (e) {
+    console.log("OpenRouter failed");
+  }
+
+  return "⚠️ All AI services failed. Try again later.";
 }
 
-/* ENTER */
-document.getElementById("input").addEventListener("keydown", e=>{
-  if(e.key==="Enter") send();
+// 🧠 Smart
+async function smartMode(history) {
+  const results = await Promise.allSettled([
+    groq(history),
+    openrouter(history)
+  ]);
+
+  const responses = results
+    .filter(r => r.status === "fulfilled")
+    .map(r => r.value);
+
+  if (responses.length === 0) {
+    return "⚠️ All AI services failed.";
+  }
+
+  // choose longest (best)
+  return responses.sort((a, b) => b.length - a.length)[0];
+}
+
+// 🔀 Multi API
+async function multiMode(history, api) {
+  try {
+    if (api === "groq") return await groq(history);
+    if (api === "openrouter") return await openrouter(history);
+
+    return "⚠️ Invalid API selected.";
+  } catch {
+    return "⚠️ Selected API failed.";
+  }
+}
+
+/* ---------------- ROUTES ---------------- */
+
+// ✅ IMPORTANT (Render health check)
+app.get("/", (req, res) => {
+  res.send("🚀 AyuAI Server is running!");
 });
 
-/* VOICE INPUT */
-function startVoice(){
-  const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-  rec.lang="en-US";
+// 💬 Chat endpoint
+app.post("/chat", async (req, res) => {
+  const { mode, history, api } = req.body;
 
-  rec.onresult = (e)=>{
-    document.getElementById("input").value = e.results[0][0].transcript;
-  };
+  try {
+    let reply;
 
-  rec.start();
-}
+    if (mode === "smart") {
+      reply = await smartMode(history);
+    } 
+    else if (mode === "multi") {
+      reply = await multiMode(history, api);
+    } 
+    else {
+      reply = await efficientMode(history);
+    }
 
-/* BETTER VOICE */
-function speak(text){
-  const speech = new SpeechSynthesisUtterance(text);
+    res.json({ reply });
 
-  const voices = speechSynthesis.getVoices();
+  } catch (err) {
+    console.error("ERROR:", err.response?.data || err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
-  speech.voice =
-    voices.find(v => v.name.includes("Google UK Female")) ||
-    voices.find(v => v.name.includes("Female")) ||
-    voices[0];
+/* ---------------- START SERVER ---------------- */
 
-  speech.rate = 0.95;
-  speech.pitch = 1;
+const PORT = process.env.PORT || 3000;
 
-  speechSynthesis.cancel();
-  speechSynthesis.speak(speech);
-}
-
-/* 🎧 FULL ASSISTANT MODE */
-function startAssistant(){
-  const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-  rec.continuous = true;
-  rec.lang="en-US";
-
-  rec.onresult = async (e)=>{
-    const text = e.results[e.results.length-1][0].transcript;
-
-    addMessage(text,"user-msg");
-
-    memory.push({role:"user",content:text});
-
-    const res = await fetch("/chat",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({
-        message:text,
-        mode:currentMode,
-        history:memory
-      })
-    });
-
-    const data = await res.json();
-
-    addMessage(data.reply,"bot-msg",true);
-    speak(cleanText(data.reply));
-  };
-
-  rec.start();
-}
-
-/* NEW CHAT (memory NOT cleared 🔥) */
-function newChat(){
-  history = [];
-  document.getElementById("messages").innerHTML="";
-}
-</script>
-
-</body>
-</html>
+app.listen(PORT, () => {
+  console.log("🚀 AyuAI running on port " + PORT);
+});
