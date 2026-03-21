@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>AyuAI Ultimate</title>
+<title>AyuAI</title>
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
+body {
   margin:0;
   background:#343541;
   color:white;
@@ -13,18 +14,20 @@ body{
 }
 
 /* Layout */
-.app{display:flex;height:100vh}
+.app { display:flex; height:100vh; }
 
 /* Sidebar */
-.sidebar{
+.sidebar {
   width:260px;
   background:#202123;
   padding:15px;
   display:flex;
   flex-direction:column;
+  justify-content:space-between;
 }
 
-.new-btn{
+.new-btn {
+  width:100%;
   padding:10px;
   background:#343541;
   border:1px solid #555;
@@ -33,68 +36,67 @@ body{
   cursor:pointer;
 }
 
-.chat-list{margin-top:10px;overflow:auto}
-.chat-item{
-  padding:8px;
-  background:#111;
-  border-radius:6px;
-  margin-bottom:5px;
-  cursor:pointer;
+/* Chat */
+.chat {
+  flex:1;
+  display:flex;
+  flex-direction:column;
 }
 
-/* Chat */
-.chat{flex:1;display:flex;flex-direction:column}
-
-.topbar{
+/* Topbar */
+.topbar {
   display:flex;
   justify-content:space-between;
-  padding:10px;
+  align-items:center;
+  padding:12px;
   border-bottom:1px solid #444;
 }
 
-#modeBtn{cursor:pointer}
+/* Logo */
+.logo {
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+.logo img {
+  width:35px;
+  height:35px;
+  border-radius:6px;
+}
 
 /* Messages */
-#messages{
+#messages {
   flex:1;
   padding:20px;
   overflow-y:auto;
   display:flex;
   flex-direction:column;
-  gap:15px;
+  gap:18px;
 }
 
-.msg{
+.msg {
   max-width:800px;
+  width:100%;
   margin:auto;
   padding:15px;
   border-radius:10px;
   line-height:1.6;
+  white-space:pre-wrap;
+  word-spacing: 2px; /* FIX spacing */
 }
 
-.user-msg{background:#444654}
-.bot-msg{background:#343541}
-
-/* Typing indicator */
-.typing{
-  font-size:20px;
-  opacity:0.7;
-  animation:blink 1s infinite;
-}
-@keyframes blink{
-  0%{opacity:0.2}
-  50%{opacity:1}
-  100%{opacity:0.2}
-}
+.user-msg { background:#444654; }
+.bot-msg { background:#343541; }
 
 /* Input */
-.input-box{
+.input-box {
   display:flex;
-  padding:10px;
+  padding:15px;
   background:#40414f;
 }
 
-input{
+.input-box input {
   flex:1;
   padding:12px;
   border:none;
@@ -103,7 +105,8 @@ input{
   color:white;
 }
 
-button{
+/* Buttons */
+button {
   margin-left:10px;
   padding:10px;
   border:none;
@@ -113,11 +116,19 @@ button{
   cursor:pointer;
 }
 
-.mic{background:#ef4444}
+.mic { background:#ef4444; }
+.assistant { background:#9333ea; }
+
+/* Footer */
+.footer {
+  font-size:12px;
+  text-align:center;
+  opacity:0.6;
+}
 
 /* Mobile */
-@media(max-width:768px){
-  .sidebar{display:none}
+@media (max-width:768px){
+  .sidebar { display:none; }
 }
 </style>
 </head>
@@ -126,211 +137,194 @@ button{
 
 <div class="app">
 
+<!-- Sidebar -->
 <div class="sidebar">
-  <button class="new-btn" onclick="newChat()">+ New Chat</button>
-  <div id="chat-list" class="chat-list"></div>
+  <div>
+    <button class="new-btn" onclick="newChat()">+ New Chat</button>
+  </div>
+
+  <div class="footer">
+    Made by Abhay Pratap 🚀
+  </div>
 </div>
 
+<!-- Chat -->
 <div class="chat">
 
-<div class="topbar">
-  <span>AyuAI 🤖</span>
-  <span id="modeBtn" onclick="changeMode()">⚡ Efficient</span>
-</div>
+  <div class="topbar">
+    <div class="logo">
+      <img src="logo.png">
+      <span>AyuAI 🤖</span>
+    </div>
 
-<div id="messages"></div>
+    <div>
+      <button onclick="setMode('efficient')">⚡</button>
+      <button onclick="setMode('smart')">🧠</button>
+      <button onclick="startAssistant()" class="assistant">🎧</button>
+    </div>
+  </div>
 
-<div class="input-box">
-  <input id="input" placeholder="Message AyuAI...">
-  <button onclick="send()">Send</button>
-  <button class="mic" onclick="startVoice()">🎤</button>
-</div>
+  <div id="messages"></div>
+
+  <div class="input-box">
+    <input id="input" placeholder="Message AyuAI...">
+    <button onclick="send()">Send</button>
+    <button class="mic" onclick="startVoice()">🎤</button>
+  </div>
 
 </div>
 </div>
 
 <script>
-let history=[];
-let chats=[];
-let currentChatIndex=-1;
-let mode="efficient";
-let userName=null;
+let history = [];
+let memory = []; // 🔥 persistent memory
+let currentMode = "efficient";
 
 /* MODE */
-function changeMode(){
-  if(mode==="efficient"){mode="smart";update("🧠 Smart")}
-  else if(mode==="smart"){mode="assistant";update("🎤 Assistant");startAssistant()}
-  else{mode="efficient";update("⚡ Efficient")}
+function setMode(mode){
+  currentMode = mode;
 }
 
-function update(text){
-  document.getElementById("modeBtn").innerText=text;
+/* CLEAN TEXT (remove emoji for voice) */
+function cleanText(text){
+  return text.replace(/[\u{1F600}-\u{1F6FF}]/gu, '');
 }
 
 /* SEND */
-async function send(textFromVoice=null){
-  const input=document.getElementById("input");
-  const text=textFromVoice||input.value.trim();
+async function send(){
+  const input = document.getElementById("input");
+  const text = input.value.trim();
   if(!text) return;
 
   addMessage(text,"user-msg");
   input.value="";
 
   history.push({role:"user",content:text});
-
-  showTyping();
+  memory.push({role:"user",content:text}); // 🔥 save memory
 
   try{
-    const res=await fetch("/chat",{
+    const res = await fetch("/chat",{
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({message:text,mode:"efficient",history})
+      body: JSON.stringify({
+        message:text,
+        mode:currentMode,
+        history:[...memory] // 🔥 use memory always
+      })
     });
 
-    const data=await res.json();
+    const data = await res.json();
 
-    removeTyping();
+    history.push({role:"assistant",content:data.reply});
+    memory.push({role:"assistant",content:data.reply});
 
-    let reply=data.reply;
+    addMessage(data.reply,"bot-msg",true);
 
-    // 🧠 MEMORY
-    if(text.toLowerCase().includes("my name is")){
-      userName=text.split("is")[1].trim();
-      reply="Nice to meet you "+userName+" 😊";
-    }
-
-    if(userName && reply.includes("Hello")){
-      reply=reply.replace("Hello","Hello "+userName);
-    }
-
-    history.push({role:"assistant",content:reply});
-
-    addMessage(reply,"bot-msg",true);
-    speak(reply);
-
-    saveChat();
+    speak(cleanText(data.reply)); // 🔥 FIX voice emoji
 
   }catch{
-    removeTyping();
     addMessage("⚠️ Error","bot-msg");
   }
 }
 
-/* MESSAGE */
+/* MESSAGE with typing */
 function addMessage(text,type,typing=false){
-  const div=document.createElement("div");
-  div.className="msg "+type;
+  const div = document.createElement("div");
+  div.className = "msg " + type;
+
   document.getElementById("messages").appendChild(div);
 
-  const box=document.getElementById("messages");
+  const box = document.getElementById("messages");
 
   if(typing){
     let i=0;
-    function typeAnim(){
-      if(i<text.length){
-        div.innerText+=text[i++];
-        box.scrollTop=box.scrollHeight;
-        setTimeout(typeAnim,8);
+    function typeEffect(){
+      if(i < text.length){
+        div.innerText += text.charAt(i);
+        i++;
+        box.scrollTop = box.scrollHeight;
+        setTimeout(typeEffect,10);
       }
     }
-    typeAnim();
-  }else div.innerText=text;
+    typeEffect();
+  } else {
+    div.innerText = text;
+  }
 
-  box.scrollTop=box.scrollHeight;
-}
-
-/* TYPING */
-let typingDiv=null;
-function showTyping(){
-  typingDiv=document.createElement("div");
-  typingDiv.className="msg bot-msg typing";
-  typingDiv.innerText="...";
-  document.getElementById("messages").appendChild(typingDiv);
-}
-function removeTyping(){
-  if(typingDiv) typingDiv.remove();
+  box.scrollTop = box.scrollHeight;
 }
 
 /* ENTER */
-document.getElementById("input").addEventListener("keydown",e=>{
+document.getElementById("input").addEventListener("keydown", e=>{
   if(e.key==="Enter") send();
 });
 
-/* CHAT SAVE */
-function saveChat(){
-  if(currentChatIndex===-1){
-    chats.push([...history]);
-    currentChatIndex=chats.length-1;
-  }else chats[currentChatIndex]=[...history];
-
-  renderChatList();
-}
-
-function renderChatList(){
-  const list=document.getElementById("chat-list");
-  list.innerHTML="";
-
-  chats.forEach((c,i)=>{
-    const item=document.createElement("div");
-    item.className="chat-item";
-    item.innerText=c[0]?.content.slice(0,20)||"Chat";
-    item.onclick=()=>loadChat(i);
-    list.appendChild(item);
-  });
-}
-
-function loadChat(i){
-  history=[...chats[i]];
-  currentChatIndex=i;
-
-  const box=document.getElementById("messages");
-  box.innerHTML="";
-
-  history.forEach(m=>{
-    addMessage(m.content,m.role==="user"?"user-msg":"bot-msg");
-  });
-}
-
-/* NEW CHAT */
-function newChat(){
-  history=[];
-  currentChatIndex=-1;
-  document.getElementById("messages").innerHTML="";
-}
-
-/* 🎤 VOICE INPUT */
+/* VOICE INPUT */
 function startVoice(){
-  const rec=new webkitSpeechRecognition();
+  const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
   rec.lang="en-US";
 
-  rec.onresult=e=>{
-    const text=e.results[0][0].transcript;
-    document.getElementById("input").value=text;
+  rec.onresult = (e)=>{
+    document.getElementById("input").value = e.results[0][0].transcript;
   };
 
   rec.start();
 }
 
-/* 🤖 ASSISTANT MODE */
-function startAssistant(){
-  const rec=new webkitSpeechRecognition();
-  rec.continuous=true;
-  rec.lang="en-US";
-
-  rec.onresult=e=>{
-    const text=e.results[e.results.length-1][0].transcript;
-    send(text);
-  };
-
-  rec.start();
-}
-
-/* 🔊 SPEAK */
+/* BETTER VOICE */
 function speak(text){
-  const s=new SpeechSynthesisUtterance(text);
-  s.rate=1;
+  const speech = new SpeechSynthesisUtterance(text);
+
+  const voices = speechSynthesis.getVoices();
+
+  speech.voice =
+    voices.find(v => v.name.includes("Google UK Female")) ||
+    voices.find(v => v.name.includes("Female")) ||
+    voices[0];
+
+  speech.rate = 0.95;
+  speech.pitch = 1;
+
   speechSynthesis.cancel();
-  speechSynthesis.speak(s);
+  speechSynthesis.speak(speech);
+}
+
+/* 🎧 FULL ASSISTANT MODE */
+function startAssistant(){
+  const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  rec.continuous = true;
+  rec.lang="en-US";
+
+  rec.onresult = async (e)=>{
+    const text = e.results[e.results.length-1][0].transcript;
+
+    addMessage(text,"user-msg");
+
+    memory.push({role:"user",content:text});
+
+    const res = await fetch("/chat",{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        message:text,
+        mode:currentMode,
+        history:memory
+      })
+    });
+
+    const data = await res.json();
+
+    addMessage(data.reply,"bot-msg",true);
+    speak(cleanText(data.reply));
+  };
+
+  rec.start();
+}
+
+/* NEW CHAT (memory NOT cleared 🔥) */
+function newChat(){
+  history = [];
+  document.getElementById("messages").innerHTML="";
 }
 </script>
 
