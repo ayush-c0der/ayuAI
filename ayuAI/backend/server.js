@@ -148,6 +148,7 @@ app.post("/chat", async (req, res) => {
 // ✅ FIXED FOR RENDER
 const PORT = process.env.PORT || 3000;
 
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("🚀 AyuAI running on port " + PORT);
+  console.log("Server running on " + PORT);
 });
