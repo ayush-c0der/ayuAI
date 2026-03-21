@@ -3,12 +3,20 @@ let chats = [];
 let currentChatIndex = -1;
 let currentMode = "efficient";
 
+/* 🎤 Assistant control */
+let assistantActive = false;
+let recognition;
+
 /* MODE */
 function setMode(mode) {
   currentMode = mode;
 
   document.body.classList.remove("smart","efficient");
   document.body.classList.add(mode);
+
+  // 🔥 stop assistant when switching mode
+  assistantActive = false;
+  if (recognition) recognition.stop();
 
   document.getElementById("menu").style.display = "none";
 
@@ -42,25 +50,122 @@ async function send() {
 
     history.push({ role:"assistant", content:data.reply });
 
-    addMessage(data.reply, "bot-msg");
+    addMessage(data.reply, "bot-msg", true);
 
-    saveChat(); // 🔥 IMPORTANT
+    speak(data.reply); // 🔥 voice reply
+
+    saveChat();
 
   } catch {
     addMessage("⚠️ Error", "bot-msg");
   }
 }
 
-/* MESSAGE UI */
-function addMessage(text,type) {
+/* MESSAGE UI (WITH TYPING EFFECT) */
+function addMessage(text, type, typing=false) {
   const div = document.createElement("div");
   div.className = "msg " + type;
 
-  div.innerText = text;
   document.getElementById("messages").appendChild(div);
 
   const box = document.getElementById("messages");
+
+  if (typing) {
+    let i = 0;
+    function typeEffect() {
+      if (i < text.length) {
+        div.innerText += text.charAt(i);
+        i++;
+        box.scrollTop = box.scrollHeight;
+        setTimeout(typeEffect, 10);
+      }
+    }
+    typeEffect();
+  } else {
+    div.innerText = text;
+  }
+
   box.scrollTop = box.scrollHeight;
+}
+
+/* 🔊 BETTER VOICE */
+function speak(text) {
+  // ❌ remove emojis
+  const clean = text.replace(/[^\p{L}\p{N}\p{P}\p{Z}]/gu, '');
+
+  const speech = new SpeechSynthesisUtterance(clean);
+  const voices = speechSynthesis.getVoices();
+
+  speech.voice =
+    voices.find(v => v.name.includes("Google UK English Female")) ||
+    voices.find(v => v.name.includes("Google US English")) ||
+    voices.find(v => v.name.includes("Female")) ||
+    voices[0];
+
+  speech.rate = 0.95;
+  speech.pitch = 1;
+
+  speechSynthesis.cancel();
+  speechSynthesis.speak(speech);
+}
+
+/* 🎤 VOICE INPUT */
+function startVoice() {
+  const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  rec.lang = "en-US";
+
+  rec.onresult = (e) => {
+    document.getElementById("input").value = e.results[0][0].transcript;
+  };
+
+  rec.start();
+}
+
+/* 🎧 ASSISTANT MODE (FIXED) */
+function startAssistant() {
+
+  // toggle OFF
+  if (assistantActive) {
+    assistantActive = false;
+    if (recognition) recognition.stop();
+    return;
+  }
+
+  assistantActive = true;
+
+  recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.continuous = true;
+  recognition.lang = "en-US";
+
+  recognition.onresult = async (e) => {
+    if (!assistantActive) return;
+
+    const text = e.results[e.results.length-1][0].transcript;
+
+    addMessage(text, "user-msg");
+    history.push({ role:"user", content:text });
+
+    const res = await fetch("/chat", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        message:text,
+        mode:currentMode,
+        history:history
+      })
+    });
+
+    const data = await res.json();
+
+    history.push({ role:"assistant", content:data.reply });
+
+    addMessage(data.reply, "bot-msg", true);
+    speak(data.reply);
+
+    saveChat();
+  };
+
+  recognition.start();
 }
 
 /* ENTER */
@@ -83,6 +188,8 @@ function saveChat() {
 /* SHOW CHAT LIST */
 function renderChatList() {
   const list = document.getElementById("chat-list");
+  if (!list) return;
+
   list.innerHTML = "";
 
   chats.forEach((chat, i) => {
@@ -113,6 +220,5 @@ function loadChat(i) {
 function newChat() {
   history = [];
   currentChatIndex = -1;
-
   document.getElementById("messages").innerHTML = "";
 }
