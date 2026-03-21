@@ -10,8 +10,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ serve frontend (IMPORTANT)
-app.use(express.static(path.join(__dirname, "frontend")));
+// 🔥 FIXED PATH (IMPORTANT)
+app.use(express.static(path.join(__dirname, "../frontend")));
 
 /* ---------------- SYSTEM PROMPT ---------------- */
 
@@ -46,8 +46,6 @@ async function openrouter(history) {
     {
       headers: {
         Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-
-        // ✅ FIXED (YOUR REAL LINK)
         "HTTP-Referer": "https://ayuai.onrender.com",
         "X-Title": "AyuAI"
       }
@@ -79,24 +77,12 @@ async function groq(history) {
 
 /* ---------------- MODES ---------------- */
 
-// ⚡ Efficient
 async function efficientMode(history) {
-  try {
-    return await groq(history);
-  } catch (e) {
-    console.log("Groq failed");
-  }
-
-  try {
-    return await openrouter(history);
-  } catch (e) {
-    console.log("OpenRouter failed");
-  }
-
-  return "⚠️ All AI services failed. Try again later.";
+  try { return await groq(history); } catch {}
+  try { return await openrouter(history); } catch {}
+  return "⚠️ All AI services failed.";
 }
 
-// 🧠 Smart
 async function smartMode(history) {
   const results = await Promise.allSettled([
     groq(history),
@@ -107,20 +93,15 @@ async function smartMode(history) {
     .filter(r => r.status === "fulfilled")
     .map(r => r.value);
 
-  if (responses.length === 0) {
-    return "⚠️ All AI services failed.";
-  }
+  if (responses.length === 0) return "⚠️ All AI services failed.";
 
-  // choose longest (best)
   return responses.sort((a, b) => b.length - a.length)[0];
 }
 
-// 🔀 Multi API
 async function multiMode(history, api) {
   try {
     if (api === "groq") return await groq(history);
     if (api === "openrouter") return await openrouter(history);
-
     return "⚠️ Invalid API selected.";
   } catch {
     return "⚠️ Selected API failed.";
@@ -129,27 +110,20 @@ async function multiMode(history, api) {
 
 /* ---------------- ROUTES ---------------- */
 
-// ✅ IMPORTANT (Render health check)
+// 🔥 FIXED ROOT (SHOW UI INSTEAD OF TEXT)
 app.get("/", (req, res) => {
-  res.send("🚀 AyuAI Server is running!");
+  res.sendFile(path.join(__dirname, "../frontend", "index.html"));
 });
 
-// 💬 Chat endpoint
 app.post("/chat", async (req, res) => {
   const { mode, history, api } = req.body;
 
   try {
     let reply;
 
-    if (mode === "smart") {
-      reply = await smartMode(history);
-    } 
-    else if (mode === "multi") {
-      reply = await multiMode(history, api);
-    } 
-    else {
-      reply = await efficientMode(history);
-    }
+    if (mode === "smart") reply = await smartMode(history);
+    else if (mode === "multi") reply = await multiMode(history, api);
+    else reply = await efficientMode(history);
 
     res.json({ reply });
 
@@ -159,7 +133,7 @@ app.post("/chat", async (req, res) => {
   }
 });
 
-/* ---------------- START SERVER ---------------- */
+/* ---------------- START ---------------- */
 
 const PORT = process.env.PORT || 3000;
 
