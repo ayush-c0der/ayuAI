@@ -19,7 +19,7 @@ app.use(express.static(path.join(__dirname, "../frontend")));
 const SYSTEM_PROMPT = {
   role: "system",
   content: `
-You are Ayu AI 🤖, a highly intelligent assistant.
+You are Ayu AI 🤖, a highly intelligent assistant made by abhay pratap son of santosh kumar.
 
 Rules:
 - Give detailed and well-explained answers
