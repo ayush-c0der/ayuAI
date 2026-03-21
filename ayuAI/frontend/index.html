@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>AyuAI</title>
+
+<style>
+body {
+  margin:0;
+  background:#0f172a;
+  color:white;
+  font-family:system-ui;
+  transition:0.3s;
+}
+
+body.smart {
+  background:#020617;
+}
+
+.app {
+  display:flex;
+  height:100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  width:240px;
+  background:#020617;
+  padding:15px;
+}
+
+.new-btn {
+  width:100%;
+  padding:10px;
+  margin-bottom:10px;
+  background:#1e293b;
+  border:none;
+  color:white;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+/* 🔥 Chat List */
+.chat-list {
+  margin-top:10px;
+}
+
+.chat-item {
+  background:#111827;
+  padding:10px;
+  border-radius:8px;
+  margin-bottom:6px;
+  cursor:pointer;
+}
+
+.chat-item:hover {
+  background:#1e293b;
+}
+
+/* Chat */
+.chat {
+  flex:1;
+  display:flex;
+  flex-direction:column;
+}
+
+/* Topbar */
+.topbar {
+  display:flex;
+  justify-content:space-between;
+  padding:12px 20px;
+  border-bottom:1px solid #1e293b;
+  background:#020617;
+}
+
+/* Logo */
+.logo {
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+.logo img {
+  width:35px;
+  height:35px;
+}
+
+/* Dropdown */
+.dropdown {
+  position:relative;
+}
+
+.menu {
+  display:none;
+  position:absolute;
+  right:0;
+  top:30px;
+  background:#111827;
+  padding:10px;
+  border-radius:8px;
+}
+
+/* Messages */
+#messages {
+  flex:1;
+  padding:30px;
+  overflow-y:auto;
+  display:flex;
+  flex-direction:column;
+  gap:20px;
+}
+
+.msg {
+  padding:14px;
+  border-radius:16px;
+  max-width:65%;
+  white-space:pre-wrap;
+}
+
+.user-msg {
+  background:#2563eb;
+  align-self:flex-end;
+}
+
+.bot-msg {
+  background:#1e293b;
+}
+
+/* Input */
+.input-box {
+  display:flex;
+  padding:15px;
+  background:#020617;
+}
+
+input {
+  flex:1;
+  padding:14px;
+  border:none;
+  border-radius:12px;
+  background:#111827;
+  color:white;
+}
+
+button {
+  margin-left:10px;
+  padding:14px;
+  border:none;
+  border-radius:12px;
+  background:#2563eb;
+  color:white;
+}
+</style>
+
+</head>
+<body>
+
+<div class="app">
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <button class="new-btn" onclick="newChat()">+ New Chat</button>
+  <div id="chat-list" class="chat-list"></div>
+</div>
+
+<!-- Chat -->
+<div class="chat">
+
+  <div class="topbar">
+    <div class="logo">
+      <img src="logo.png">
+      <span>AyuAI</span>
+    </div>
+
+    <div class="dropdown">
+      <span onclick="toggleMenu()" id="ai-name">⚡ Efficient ▼</span>
+
+      <div id="menu" class="menu">
+        <div onclick="setMode('efficient')">⚡ Efficient</div>
+        <div onclick="setMode('smart')">🧠 Smart</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="messages"></div>
+
+  <div class="input-box">
+    <input id="input" placeholder="Message AyuAI...">
+    <button onclick="send()">➤</button>
+  </div>
+
+</div>
+
+</div>
+
+<script>
+let history = [];
+let chats = [];
+let currentChatIndex = -1;
+let currentMode = "efficient";
+
+/* MENU */
+function toggleMenu() {
+  const m = document.getElementById("menu");
+  m.style.display = m.style.display === "block" ? "none" : "block";
+}
+
+/* MODE */
+function setMode(mode) {
+  currentMode = mode;
+
+  document.body.className = mode;
+
+  document.getElementById("menu").style.display = "none";
+
+  document.getElementById("ai-name").innerText =
+    mode === "smart" ? "🧠 Smart ▼" : "⚡ Efficient ▼";
+}
+
+/* SEND */
+async function send() {
+  const input = document.getElementById("input");
+  const text = input.value.trim();
+  if (!text) return;
+
+  addMessage(text, "user-msg");
+  input.value = "";
+
+  history.push({ role:"user", content:text });
+
+  try {
+    const res = await fetch("/chat", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        message:text,
+        mode:currentMode,
+        history:history
+      })
+    });
+
+    const data = await res.json();
+
+    history.push({ role:"assistant", content:data.reply });
+
+    addMessage(data.reply, "bot-msg");
+
+    saveChat(); // 🔥 IMPORTANT
+
+  } catch {
+    addMessage("⚠️ Error", "bot-msg");
+  }
+}
+
+/* MESSAGE */
+function addMessage(text,type) {
+  const div = document.createElement("div");
+  div.className = "msg " + type;
+  div.innerText = text;
+
+  document.getElementById("messages").appendChild(div);
+
+  const box = document.getElementById("messages");
+  box.scrollTop = box.scrollHeight;
+}
+
+/* ENTER */
+document.getElementById("input").addEventListener("keydown", e=>{
+  if(e.key==="Enter") send();
+});
+
+/* SAVE CHAT (RAM ONLY) */
+function saveChat() {
+  if (currentChatIndex === -1) {
+    chats.push([...history]);
+    currentChatIndex = chats.length - 1;
+  } else {
+    chats[currentChatIndex] = [...history];
+  }
+  renderChatList();
+}
+
+/* SHOW CHAT LIST */
+function renderChatList() {
+  const list = document.getElementById("chat-list");
+  list.innerHTML = "";
+
+  chats.forEach((chat, i) => {
+    const item = document.createElement("div");
+    item.className = "chat-item";
+    item.innerText = chat[0]?.content?.slice(0, 20) || "New Chat";
+
+    item.onclick = () => loadChat(i);
+
+    list.appendChild(item);
+  });
+}
+
+/* LOAD CHAT */
+function loadChat(i) {
+  history = [...chats[i]];
+  currentChatIndex = i;
+
+  document.getElementById("messages").innerHTML = "";
+
+  history.forEach(m => {
+    addMessage(m.content, m.role === "user" ? "user-msg" : "bot-msg");
+  });
+}
+
+/* NEW CHAT */
+function newChat() {
+  history = [];
+  currentChatIndex = -1;
+  document.getElementById("messages").innerHTML = "";
+}
+</script>
+
+</body>
+</html>
