@@ -11,7 +11,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// serve frontend (IMPORTANT: fix path)
+// serve frontend
 app.use(express.static(path.join(__dirname, "frontend")));
 
 /* ---------------- SYSTEM PROMPT ---------------- */
@@ -34,7 +34,6 @@ Rules:
 
 /* ---------------- API CALLS ---------------- */
 
-// OpenRouter
 async function openrouter(history) {
   const res = await axios.post(
     "https://openrouter.ai/api/v1/chat/completions",
@@ -56,7 +55,6 @@ async function openrouter(history) {
   return res.data.choices[0].message.content;
 }
 
-// Groq
 async function groq(history) {
   const res = await axios.post(
     "https://api.groq.com/openai/v1/chat/completions",
@@ -78,14 +76,12 @@ async function groq(history) {
 
 /* ---------------- MODES ---------------- */
 
-// ⚡ Efficient
 async function efficientMode(history) {
-  try { return await groq(history); } catch (e) {}
-  try { return await openrouter(history); } catch (e) {}
+  try { return await groq(history); } catch {}
+  try { return await openrouter(history); } catch {}
   return "⚠️ All APIs failed.";
 }
 
-// 🧠 Smart
 async function smartMode(history) {
   const results = await Promise.allSettled([
     groq(history),
@@ -101,7 +97,6 @@ async function smartMode(history) {
   return texts.sort((a, b) => b.length - a.length)[0];
 }
 
-// 🔀 Multi API
 async function multiMode(history, api) {
   try {
     if (api === "groq") return await groq(history);
@@ -114,24 +109,21 @@ async function multiMode(history, api) {
 
 /* ---------------- ROUTES ---------------- */
 
-// health check (IMPORTANT for Render)
 app.get("/", (req, res) => {
   res.send("AyuAI Server Running 🚀");
 });
 
 app.post("/chat", async (req, res) => {
-  const { message, mode, history, api } = req.body;
+  const { mode, history, api } = req.body;
 
   try {
     let reply;
 
     if (mode === "smart") {
       reply = await smartMode(history);
-    } 
-    else if (mode === "multi") {
+    } else if (mode === "multi") {
       reply = await multiMode(history, api);
-    } 
-    else {
+    } else {
       reply = await efficientMode(history);
     }
 
@@ -145,10 +137,9 @@ app.post("/chat", async (req, res) => {
 
 /* ---------------- START SERVER ---------------- */
 
-// ✅ FIXED FOR RENDER
+// ✅ ONLY ONE PORT (FIXED)
 const PORT = process.env.PORT || 3000;
 
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Server running on " + PORT);
+  console.log("🚀 Server running on port " + PORT);
 });
