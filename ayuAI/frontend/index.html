@@ -2,32 +2,28 @@
 <html>
 <head>
 <title>AyuAI</title>
-
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body {
+body{
   margin:0;
   background:#343541;
   color:white;
   font-family:system-ui;
 }
 
-/* Layout */
-.app {
-  display:flex;
-  height:100vh;
-}
+.app{display:flex;height:100vh;}
 
 /* Sidebar */
-.sidebar {
+.sidebar{
   width:260px;
   background:#202123;
   padding:15px;
+  display:flex;
+  flex-direction:column;
 }
 
-.new-btn {
-  width:100%;
+.new-btn{
   padding:10px;
   background:#343541;
   border:1px solid #555;
@@ -36,56 +32,60 @@ body {
   cursor:pointer;
 }
 
-/* Chat */
-.chat {
-  flex:1;
-  display:flex;
-  flex-direction:column;
+/* Chat list */
+.chat-list{
+  margin-top:10px;
+  overflow:auto;
 }
 
-/* Topbar */
-.topbar {
-  padding:12px;
-  border-bottom:1px solid #444;
-  text-align:center;
-  font-weight:bold;
+.chat-item{
+  padding:8px;
+  background:#111;
+  border-radius:6px;
+  margin-bottom:5px;
+  cursor:pointer;
 }
+
+/* Chat */
+.chat{flex:1;display:flex;flex-direction:column;}
+
+.topbar{
+  display:flex;
+  justify-content:space-between;
+  padding:10px;
+  border-bottom:1px solid #444;
+}
+
+#modeBtn{cursor:pointer}
 
 /* Messages */
-#messages {
+#messages{
   flex:1;
   padding:20px;
   overflow-y:auto;
   display:flex;
   flex-direction:column;
-  gap:20px;
+  gap:15px;
 }
 
-.msg {
+.msg{
   max-width:800px;
-  width:100%;
   margin:auto;
   padding:15px;
   border-radius:10px;
-  line-height:1.6;
 }
 
-.user-msg {
-  background:#444654;
-}
-
-.bot-msg {
-  background:#343541;
-}
+.user-msg{background:#444654;}
+.bot-msg{background:#343541;}
 
 /* Input */
-.input-box {
+.input-box{
   display:flex;
-  padding:15px;
+  padding:10px;
   background:#40414f;
 }
 
-.input-box input {
+input{
   flex:1;
   padding:12px;
   border:none;
@@ -94,8 +94,7 @@ body {
   color:white;
 }
 
-/* Buttons */
-button {
+button{
   margin-left:10px;
   padding:10px;
   border:none;
@@ -105,57 +104,58 @@ button {
   cursor:pointer;
 }
 
-button:hover {
-  opacity:0.8;
-}
-
-/* Mic button */
-.mic {
-  background:#ef4444;
-}
-
-/* Mobile */
-@media (max-width:768px){
-  .sidebar {
-    display:none;
-  }
-}
+.mic{background:#ef4444;}
 </style>
-
 </head>
 
 <body>
 
 <div class="app">
 
-<!-- Sidebar -->
 <div class="sidebar">
   <button class="new-btn" onclick="newChat()">+ New Chat</button>
+  <div id="chat-list" class="chat-list"></div>
 </div>
 
-<!-- Chat -->
 <div class="chat">
 
-  <div class="topbar">AyuAI 🤖</div>
+<div class="topbar">
+  <span>AyuAI 🤖</span>
+  <span id="modeBtn" onclick="changeMode()">⚡ Efficient</span>
+</div>
 
-  <div id="messages"></div>
+<div id="messages"></div>
 
-  <div class="input-box">
-    <input id="input" placeholder="Message AyuAI...">
-    <button onclick="send()">Send</button>
-    <button class="mic" onclick="startVoice()">🎤</button>
-  </div>
+<div class="input-box">
+  <input id="input" placeholder="Message AyuAI...">
+  <button onclick="send()">Send</button>
+  <button class="mic" onclick="startVoice()">🎤</button>
+</div>
 
 </div>
 </div>
 
 <script>
-let history = [];
+let history=[];
+let chats=[];
+let currentChatIndex=-1;
+let mode="efficient";
+
+/* MODE SWITCH */
+function changeMode(){
+  if(mode==="efficient"){mode="smart";updateMode("🧠 Smart");}
+  else if(mode==="smart"){mode="assistant";updateMode("🎤 Assistant");startAssistant();}
+  else{mode="efficient";updateMode("⚡ Efficient");}
+}
+
+function updateMode(text){
+  document.getElementById("modeBtn").innerText=text;
+}
 
 /* SEND */
-async function send(){
-  const input = document.getElementById("input");
-  const text = input.value.trim();
+async function send(textFromVoice=null){
+  const input=document.getElementById("input");
+  const text=textFromVoice||input.value.trim();
   if(!text) return;
 
   addMessage(text,"user-msg");
@@ -164,23 +164,20 @@ async function send(){
   history.push({role:"user",content:text});
 
   try{
-    const res = await fetch("/chat",{
+    const res=await fetch("/chat",{
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({
-        message:text,
-        mode:"efficient",
-        history:history
-      })
+      body:JSON.stringify({message:text,mode:"efficient",history})
     });
 
-    const data = await res.json();
+    const data=await res.json();
 
     history.push({role:"assistant",content:data.reply});
 
     addMessage(data.reply,"bot-msg",true);
+    speak(data.reply);
 
-    speak(data.reply); // 🔥 VOICE OUTPUT
+    saveChat();
 
   }catch{
     addMessage("⚠️ Error","bot-msg");
@@ -189,76 +186,109 @@ async function send(){
 
 /* MESSAGE */
 function addMessage(text,type,typing=false){
-  const div = document.createElement("div");
-  div.className = "msg " + type;
-
+  const div=document.createElement("div");
+  div.className="msg "+type;
   document.getElementById("messages").appendChild(div);
 
-  const box = document.getElementById("messages");
+  const box=document.getElementById("messages");
 
   if(typing){
     let i=0;
-    function typeEffect(){
-      if(i < text.length){
-        div.innerText += text.charAt(i);
-        i++;
-        box.scrollTop = box.scrollHeight;
-        setTimeout(typeEffect,8);
+    function type(){
+      if(i<text.length){
+        div.innerText+=text[i++];
+        box.scrollTop=box.scrollHeight;
+        setTimeout(type,8);
       }
     }
-    typeEffect();
-  } else {
-    div.innerText = text;
-  }
+    type();
+  }else div.innerText=text;
 
-  box.scrollTop = box.scrollHeight;
+  box.scrollTop=box.scrollHeight;
 }
 
 /* ENTER */
-document.getElementById("input").addEventListener("keydown", e=>{
+document.getElementById("input").addEventListener("keydown",e=>{
   if(e.key==="Enter") send();
 });
 
+/* CHAT SAVE */
+function saveChat(){
+  if(currentChatIndex===-1){
+    chats.push([...history]);
+    currentChatIndex=chats.length-1;
+  }else chats[currentChatIndex]=[...history];
+
+  renderChatList();
+}
+
+function renderChatList(){
+  const list=document.getElementById("chat-list");
+  list.innerHTML="";
+
+  chats.forEach((c,i)=>{
+    const item=document.createElement("div");
+    item.className="chat-item";
+    item.innerText=c[0]?.content.slice(0,20)||"Chat";
+    item.onclick=()=>loadChat(i);
+    list.appendChild(item);
+  });
+}
+
+function loadChat(i){
+  history=[...chats[i]];
+  currentChatIndex=i;
+
+  const box=document.getElementById("messages");
+  box.innerHTML="";
+
+  history.forEach(m=>{
+    addMessage(m.content,m.role==="user"?"user-msg":"bot-msg");
+  });
+}
+
 /* NEW CHAT */
 function newChat(){
-  history = [];
+  history=[];
+  currentChatIndex=-1;
   document.getElementById("messages").innerHTML="";
 }
 
 /* 🎤 VOICE INPUT */
 function startVoice(){
-  if(!('webkitSpeechRecognition' in window)){
-    alert("Voice not supported");
-    return;
-  }
+  const rec=new webkitSpeechRecognition();
+  rec.lang="en-US";
 
-  const recognition = new webkitSpeechRecognition();
-  recognition.lang = "en-US";
-
-  recognition.onresult = (event) => {
-    const text = event.results[0][0].transcript;
-    document.getElementById("input").value = text;
+  rec.onresult=e=>{
+    const text=e.results[0][0].transcript;
+    document.getElementById("input").value=text;
   };
 
-  recognition.start();
+  rec.start();
 }
 
-/* 🔊 AI SPEAK */
+/* 🤖 ASSISTANT MODE */
+function startAssistant(){
+  const rec=new webkitSpeechRecognition();
+  rec.continuous=true;
+  rec.lang="en-US";
+
+  rec.onresult=e=>{
+    const text=e.results[e.results.length-1][0].transcript;
+    send(text);
+  };
+
+  rec.start();
+}
+
+/* 🔊 SPEAK */
 function speak(text){
-  const speech = new SpeechSynthesisUtterance(text);
-
-  speech.rate = 1;     // speed
-  speech.pitch = 1;    // voice tone
-  speech.volume = 1;
-
-  // Optional: choose better voice
-  const voices = speechSynthesis.getVoices();
-  speech.voice = voices.find(v => v.name.includes("Google")) || voices[0];
-
-  speechSynthesis.cancel(); // stop previous speech
-  speechSynthesis.speak(speech);
+  const s=new SpeechSynthesisUtterance(text);
+  s.rate=1;
+  speechSynthesis.cancel();
+  speechSynthesis.speak(s);
 }
 </script>
 
 </body>
-</html>
+</html>s
