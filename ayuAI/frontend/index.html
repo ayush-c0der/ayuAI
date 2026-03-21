@@ -1,1 +1,69 @@
-<!DOCTYPE html> <html> <head> <title>AyuAI</title> <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Icons (IMPORTANT) --> <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"> <style> /* === YOUR CSS WILL GO BELOW (NEXT SECTION) === */ </style> </head> <body> <div class="app"> <!-- Sidebar --> <div class="sidebar"> <div> <button class="new-btn" onclick="newChat()">+ New Chat</button> </div> <div class="footer"> Made by Abhay Pratap </div> </div> <!-- Chat --> <div class="chat"> <div class="topbar"> <div class="logo"> <img src="logo.png"> <span>AyuAI</span> </div> <!-- 🔥 PROFESSIONAL MODE BUTTONS --> <div class="mode-buttons"> <button class="mode-btn" onclick="setMode('efficient')" title="Efficient Mode"> <span class="material-icons">bolt</span> </button> <button class="mode-btn" onclick="setMode('smart')" title="Smart Mode"> <span class="material-icons">psychology</span> </button> </div> </div> <div id="messages"></div> <div class="input-box"> <input id="input" placeholder="Message AyuAI..."> <!-- Send --> <button class="send-btn" onclick="send()"> <span class="material-icons">send</span> </button> <!-- Mic --> <button class="mic-btn" onclick="startVoice()"> <span class="material-icons">mic</span> </button> </div> </div> </div>
+<!DOCTYPE html>
+<html>
+<head>
+<title>AyuAI</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Icons (IMPORTANT) -->
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+<style>
+/* === YOUR CSS WILL GO BELOW (NEXT SECTION) === */
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div>
+    <button class="new-btn" onclick="newChat()">+ New Chat</button>
+  </div>
+
+  <div class="footer">
+    Made by Abhay Pratap
+  </div>
+</div>
+
+<!-- Chat -->
+<div class="chat">
+
+  <div class="topbar">
+    <div class="logo">
+      <img src="logo.png">
+      <span>AyuAI</span>
+    </div>
+
+    <!-- 🔥 PROFESSIONAL MODE BUTTONS -->
+    <div class="mode-buttons">
+      <button class="mode-btn" onclick="setMode('efficient')" title="Efficient Mode">
+        <span class="material-icons">bolt</span>
+      </button>
+
+      <button class="mode-btn" onclick="setMode('smart')" title="Smart Mode">
+        <span class="material-icons">psychology</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="messages"></div>
+
+  <div class="input-box">
+    <input id="input" placeholder="Message AyuAI...">
+
+    <!-- Send -->
+    <button class="send-btn" onclick="send()">
+      <span class="material-icons">send</span>
+    </button>
+
+    <!-- Mic -->
+    <button class="mic-btn" onclick="startVoice()">
+      <span class="material-icons">mic</span>
+    </button>
+  </div>
+
+</div>
+</div>
