@@ -21,19 +21,44 @@ body {
 
 /* Sidebar */
 .sidebar {
-  width:240px;
+  width:260px;
   background:#020617;
   padding:15px;
+  display:flex;
+  flex-direction:column;
 }
 
 .new-btn {
-  width:100%;
   padding:10px;
   background:#1e293b;
   border:none;
   color:white;
   border-radius:8px;
   cursor:pointer;
+  margin-bottom:10px;
+}
+
+.new-btn:hover {
+  background:#334155;
+}
+
+/* Chat history */
+.chat-list {
+  flex:1;
+  overflow-y:auto;
+}
+
+.chat-item {
+  background:#111827;
+  padding:10px;
+  border-radius:8px;
+  margin-bottom:6px;
+  cursor:pointer;
+  font-size:14px;
+}
+
+.chat-item:hover {
+  background:#1e293b;
 }
 
 /* Chat */
@@ -47,6 +72,7 @@ body {
 .topbar {
   display:flex;
   justify-content:space-between;
+  align-items:center;
   padding:12px 20px;
   border-bottom:1px solid #1e293b;
   background:#020617;
@@ -143,12 +169,11 @@ body {
   cursor:pointer;
 }
 
-/* 📱 MOBILE */
+/* Mobile */
 @media (max-width:768px){
   .sidebar {
     display:none;
   }
-
   .msg {
     max-width:90%;
   }
@@ -163,7 +188,12 @@ body {
 
 <!-- Sidebar -->
 <div class="sidebar">
+
   <button class="new-btn" onclick="newChat()">+ New Chat</button>
+
+  <!-- 🔥 Chat History -->
+  <div id="chat-list" class="chat-list"></div>
+
 </div>
 
 <!-- Chat -->
@@ -173,7 +203,10 @@ body {
   <div class="topbar">
     <div class="logo">
       <img src="logo.png">
-      <span>AyuAI</span>
+      <div>
+        <div>AyuAI</div>
+        <small style="color:#94a3b8">Made by Abhay Pratap</small>
+      </div>
     </div>
 
     <div class="dropdown">
@@ -200,6 +233,8 @@ body {
 
 <script>
 let history = [];
+let chats = [];
+let currentChatIndex = -1;
 let currentMode = "efficient";
 
 /* MENU */
@@ -246,12 +281,14 @@ async function send(){
 
     addMessage(data.reply,"bot-msg",true);
 
+    saveChat();
+
   }catch{
     addMessage("⚠️ Error","bot-msg");
   }
 }
 
-/* MESSAGE WITH TYPING */
+/* MESSAGE */
 function addMessage(text,type,typing=false){
   const div = document.createElement("div");
   div.className = "msg " + type;
@@ -267,7 +304,7 @@ function addMessage(text,type,typing=false){
         div.innerText += text.charAt(i);
         i++;
         box.scrollTop = box.scrollHeight;
-        setTimeout(typeEffect,15);
+        setTimeout(typeEffect,10);
       }
     }
     typeEffect();
@@ -278,14 +315,55 @@ function addMessage(text,type,typing=false){
   box.scrollTop = box.scrollHeight;
 }
 
-/* ENTER KEY */
+/* ENTER */
 document.getElementById("input").addEventListener("keydown", e=>{
   if(e.key==="Enter") send();
 });
 
+/* SAVE CHAT */
+function saveChat(){
+  if(currentChatIndex === -1){
+    chats.push([...history]);
+    currentChatIndex = chats.length - 1;
+  } else {
+    chats[currentChatIndex] = [...history];
+  }
+  renderChatList();
+}
+
+/* SHOW CHAT LIST */
+function renderChatList(){
+  const list = document.getElementById("chat-list");
+  list.innerHTML = "";
+
+  chats.forEach((chat,i)=>{
+    const item = document.createElement("div");
+    item.className = "chat-item";
+    item.innerText = chat[0]?.content?.slice(0,25) || "New Chat";
+    item.onclick = ()=>loadChat(i);
+    list.appendChild(item);
+  });
+}
+
+/* LOAD CHAT */
+function loadChat(i){
+  history = [...chats[i]];
+  currentChatIndex = i;
+
+  const box = document.getElementById("messages");
+  box.innerHTML = "";
+
+  history.forEach(m=>{
+    addMessage(m.content,
+      m.role==="user"?"user-msg":"bot-msg"
+    );
+  });
+}
+
 /* NEW CHAT */
 function newChat(){
   history = [];
+  currentChatIndex = -1;
   document.getElementById("messages").innerHTML="";
 }
 </script>
