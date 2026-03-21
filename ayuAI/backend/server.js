@@ -6,9 +6,13 @@ require("dotenv").config();
 
 const app = express();
 
+/* ---------------- MIDDLEWARE ---------------- */
+
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "../frontend")));
+
+// serve frontend (IMPORTANT: fix path)
+app.use(express.static(path.join(__dirname, "frontend")));
 
 /* ---------------- SYSTEM PROMPT ---------------- */
 
@@ -30,20 +34,20 @@ Rules:
 
 /* ---------------- API CALLS ---------------- */
 
-// OpenRouter (better quality)
+// OpenRouter
 async function openrouter(history) {
   const res = await axios.post(
     "https://openrouter.ai/api/v1/chat/completions",
     {
       model: "openai/gpt-4o-mini",
-      max_tokens: 1000,
+      max_tokens: 1200,
       temperature: 0.7,
       messages: [SYSTEM_PROMPT, ...history]
     },
     {
       headers: {
         Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "HTTP-Referer": "http://localhost:3000",
+        "HTTP-Referer": "https://your-render-url.onrender.com",
         "X-Title": "AyuAI"
       }
     }
@@ -52,13 +56,13 @@ async function openrouter(history) {
   return res.data.choices[0].message.content;
 }
 
-// Groq (fast + free)
+// Groq
 async function groq(history) {
   const res = await axios.post(
     "https://api.groq.com/openai/v1/chat/completions",
     {
       model: "llama3-70b-8192",
-      max_tokens: 1000,
+      max_tokens: 1200,
       temperature: 0.7,
       messages: [SYSTEM_PROMPT, ...history]
     },
@@ -74,14 +78,14 @@ async function groq(history) {
 
 /* ---------------- MODES ---------------- */
 
-// ⚡ Efficient → cheapest (1 API at a time)
+// ⚡ Efficient
 async function efficientMode(history) {
-  try { return await groq(history); } catch {}
-  try { return await openrouter(history); } catch {}
+  try { return await groq(history); } catch (e) {}
+  try { return await openrouter(history); } catch (e) {}
   return "⚠️ All APIs failed.";
 }
 
-// 🧠 Smart → compare both
+// 🧠 Smart
 async function smartMode(history) {
   const results = await Promise.allSettled([
     groq(history),
@@ -94,21 +98,26 @@ async function smartMode(history) {
 
   if (texts.length === 0) return "⚠️ All APIs failed.";
 
-  // pick most detailed answer
-  return texts.sort((a, b) => {
-    return b.split(" ").length - a.split(" ").length;
-  })[0];
+  return texts.sort((a, b) => b.length - a.length)[0];
 }
 
-// 🔀 Multi → user chooses API
+// 🔀 Multi API
 async function multiMode(history, api) {
-  if (api === "groq") return await groq(history);
-  if (api === "openrouter") return await openrouter(history);
-
-  return "⚠️ Invalid API selected.";
+  try {
+    if (api === "groq") return await groq(history);
+    if (api === "openrouter") return await openrouter(history);
+    return "⚠️ Invalid API selected.";
+  } catch {
+    return "⚠️ Selected API failed.";
+  }
 }
 
-/* ---------------- ROUTE ---------------- */
+/* ---------------- ROUTES ---------------- */
+
+// health check (IMPORTANT for Render)
+app.get("/", (req, res) => {
+  res.send("AyuAI Server Running 🚀");
+});
 
 app.post("/chat", async (req, res) => {
   const { message, mode, history, api } = req.body;
@@ -134,8 +143,11 @@ app.post("/chat", async (req, res) => {
   }
 });
 
-/* ---------------- START ---------------- */
+/* ---------------- START SERVER ---------------- */
 
-app.listen(3000, () => {
-  console.log("🚀 AyuAI running at http://localhost:3000");
+// ✅ FIXED FOR RENDER
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log("🚀 AyuAI running on port " + PORT);
 });
