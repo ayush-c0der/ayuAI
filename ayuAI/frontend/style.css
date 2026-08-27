@@ -101,6 +101,7 @@ body[data-mode="smart"] .smart-btn.active { border-color: #78a7ff; background: r
 .menu-toggle:hover { background: var(--border); }
 .logo { display: flex; align-items: center; gap: 8px; color: var(--main-text); font-size: 16px; font-weight: 600; min-width: 0; }
 .logo span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logo small { color: var(--muted-text); font-size: 11px; font-weight: 500; white-space: nowrap; }
 .logo img, .empty-logo { object-fit: contain; background: transparent; padding: 2px; }
 .logo img { width: 36px; height: 38px; padding: 0; border-radius: 10px; flex-shrink: 0; image-rendering: auto; filter: contrast(1.16) saturate(1.08); }
 .logo .chevron { color: var(--muted-text); margin-left: -2px; flex-shrink: 0; }
