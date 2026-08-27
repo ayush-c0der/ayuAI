@@ -19,6 +19,7 @@ const CHAT_ENDPOINT = isSeparateLocalFrontend
 const SIDEBAR_COLLAPSED_KEY = "ayuai_sidebar_collapsed";
 const PINNED_CHATS_KEY = "ayuai_pinned_chats";
 const MEMORY_KEY = "ayuai_memory";
+const THEME_KEY = "ayuai_theme";
 
 /* ===== STORAGE (temporary per-tab memory, survives reload) ===== */
 function loadChatsFromStorage() {
@@ -51,6 +52,18 @@ function setMode(mode) {
   );
   if (activeBtn) activeBtn.classList.add("active");
 }
+
+function setTheme(theme) {
+  const selectedTheme = ["dark", "lite", "glass", "neo"].includes(theme) ? theme : "dark";
+  document.body.dataset.theme = selectedTheme;
+  localStorage.setItem(THEME_KEY, selectedTheme);
+  document.querySelectorAll(".theme-btn").forEach(button => {
+    const isSelected = button.dataset.themeChoice === selectedTheme;
+    button.classList.toggle("active", isSelected);
+    button.setAttribute("aria-pressed", String(isSelected));
+  });
+}
+
 
 function toggleChatSearch(event) {
   const search = document.getElementById("chat-search");
@@ -98,7 +111,7 @@ function showEmptyState() {
   if (!box) return;
   box.innerHTML = `
     <div class="empty-state">
-      <img src="logo.png" class="empty-logo">
+      <img src="logo.svg" alt="AyuAI Logo" style="width: 32px; height: 32px; image-rendering: crisp-edges;">
       <h1>${["How can I help you today?", "What would you like to explore?", "Ready when you are."][Math.floor(Math.random() * 3)]}</h1>
     </div>
   `;
@@ -339,7 +352,12 @@ function startVoice() {
     mic?.setAttribute("aria-label", "Voice input");
     mic?.setAttribute("title", "Voice input");
   };
-  rec.onerror = () => rec.stop();
+  rec.onerror = (event) => {
+    rec.stop();
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      alert("Allow microphone access in your browser settings to use voice input.");
+    }
+  };
 
   rec.onresult = (e) => {
     const transcript = Array.from(e.results)
@@ -348,7 +366,12 @@ function startVoice() {
     document.getElementById("input").value = transcript;
   };
 
-  rec.start();
+  try {
+    rec.start();
+  } catch {
+    activeRecognition = null;
+    mic?.classList.remove("recording");
+  }
 }
 
 /* ===== ENTER KEY ===== */
@@ -472,6 +495,7 @@ function deleteAllChats() {
 loadChatsFromStorage();
 renderChatList();
 setMode(currentMode);   
+setTheme(localStorage.getItem(THEME_KEY) || "dark");
 
 if (!localStorage.getItem(COOKIE_NOTICE_KEY)) {
   const cookieNotice = document.getElementById("cookie-notice");
@@ -498,6 +522,10 @@ document.getElementById("compact-setting")?.addEventListener("change", event => 
 
 document.getElementById("motion-setting")?.addEventListener("change", event => {
   document.body.classList.toggle("reduce-motion", event.target.checked);
+});
+
+document.querySelectorAll(".theme-btn").forEach(button => {
+  button.addEventListener("click", () => setTheme(button.dataset.themeChoice));
 });
 
 document.getElementById("density-setting")?.addEventListener("change", event => {

@@ -1,7 +1,7 @@
 <html>
 <head>
 <title>AyuAI</title>
- <link rel="icon" type="image/svg+xml" href="logo.png">
+<link rel="icon" type="image/svg+xml" href="logo.png">,
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
 <meta name="theme-color" content="#171717">
@@ -74,6 +74,7 @@
     <label class="setting-row"><span>Compact mode</span><input id="compact-setting" type="checkbox"></label>
     <label class="setting-row"><span>Reduce motion</span><input id="motion-setting" type="checkbox"></label>
     <label class="setting-row"><span>Message density</span><select id="density-setting"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
+    <div class="setting-row theme-setting"><span>Appearance</span><div class="theme-buttons" role="group" aria-label="Appearance"><button type="button" class="theme-btn" data-theme-choice="dark" aria-pressed="true">Dark</button><button type="button" class="theme-btn" data-theme-choice="lite" aria-pressed="false">Lite</button><button type="button" class="theme-btn" data-theme-choice="glass" aria-pressed="false">Glass</button><button type="button" class="theme-btn" data-theme-choice="neo" aria-pressed="false">Neo</button></div></div>
   </div>
 </div>
 
@@ -86,7 +87,7 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div class="logo">
-        <img src="logo.svg">
+        <img src="logo.svg" alt="AyuAI Logo" style="width: 32px; height: 32px; image-rendering: crisp-edges;">
         <span>AyuAI</span>
         <small>2.8.6</small>
       
@@ -101,7 +102,7 @@
 
   <div id="messages">
     <div class="empty-state">
-      <img src="logo.svg" class="empty-logo">
+      <img src="logo.svg" alt="AyuAI Logo" style="width: 32px; height: 32px; image-rendering: crisp-edges;">
       <h1>How can I assist you today?</h1>
     </div>
   </div>
@@ -109,7 +110,7 @@
   <div class="composer">
     <div class="input-box">
       <input id="input" placeholder="Message AyuAI...">
-      <button class="mic" onclick="startVoice()" title="Voice input" aria-label="Voice input">
+      <button type="button" class="mic" onclick="startVoice()" title="Voice input" aria-label="Voice input">
         <span class="mic-icon"><i></i><i></i><i></i><i></i><i></i></span>
       </button>
       <button class="send-btn" onclick="send()" title="Send">

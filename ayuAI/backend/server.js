@@ -29,8 +29,13 @@ function rateLimit(req, res, next) {
   next();
 }
 
-// Static frontend lives one level up, in /frontend
-app.use(express.static(path.join(__dirname, "../frontend")));
+// Static frontend lives one level up, in /frontend. Cache immutable assets to
+// avoid re-downloading the logo, styles, and scripts on repeat visits.
+app.use(express.static(path.join(__dirname, "../frontend"), {
+  maxAge: "1d",
+  etag: true,
+  lastModified: true
+}));
 
 /* ---------------- SYSTEM PROMPT ---------------- */
 

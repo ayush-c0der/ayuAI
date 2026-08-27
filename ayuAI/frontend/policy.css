@@ -10,3 +10,4 @@ h1 { margin: 0 0 8px; font: 700 clamp(28px, 5vw, 42px)/1.1 system-ui, sans-serif
 .lead, .updated { color: var(--muted); } .updated { margin: 0 0 28px; font: 13px system-ui, sans-serif; } ul { padding-left: 22px; } li { margin: 5px 0; }
 .actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 20px 0 0; font-family: system-ui, sans-serif; } .button { padding: 8px 12px; border: 1px solid var(--green); border-radius: 7px; background: transparent; cursor: pointer; }
 @media print { body { background: #fff; color: #111; } main { border: 0; background: #fff; padding: 0; } header, nav, .actions { display: none; } .page { width: 100%; padding: 0; } .lead, .updated { color: #444; } }
+
