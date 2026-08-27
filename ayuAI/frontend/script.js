@@ -1,4 +1,6 @@
 let history = [];
+const COOKIE_NOTICE_KEY = "ayuai_cookie_notice_seen";
+const HIGH_STAKES_NOTICE = "\n\n**Important:** This AI provides informational responses and does not replace qualified professional advice. Responses may contain errors or outdated information. For medical, legal, financial, or other high-stakes matters, consult a qualified professional.";
 let chats = [];
 let currentChatIndex = -1;
 let currentMode = "efficient";
@@ -132,11 +134,12 @@ async function send() {
     });
 
     const data = await res.json();
+    const reply = res.ok ? data.reply : (data.reply || "AyuAI could not process that request.");
 
-    history.push({ role: "assistant", content: data.reply });
+    history.push({ role: "assistant", content: addHighStakesNotice(text, reply) });
 
     typingEl.remove();
-    addMessage(data.reply, "bot-msg", true);
+    addMessage(history[history.length - 1].content, "bot-msg", true);
 
     saveChat();
 
@@ -146,6 +149,13 @@ async function send() {
   } finally {
     if (sendBtn) sendBtn.disabled = false;
   }
+}
+
+function addHighStakesNotice(question, reply) {
+  const highStakesTopic = /\b(medical|medicine|doctor|symptom|diagnos|health|legal|lawyer|lawsuit|contract|financial|finance|invest|investment|loan|tax|safety|danger|emergency)\b/i.test(question);
+  return highStakesTopic && !reply.includes("This AI provides informational responses")
+    ? reply + HIGH_STAKES_NOTICE
+    : reply;
 }
 
 /* ===== TYPING INDICATOR ===== */
@@ -390,6 +400,10 @@ function renderChatList() {
     item.querySelector(".chat-title").textContent = title.slice(0, 26);
 
     item.onclick = () => loadChat(i);
+    item.oncontextmenu = event => {
+      event.preventDefault();
+      if (confirm("Delete this conversation?")) deleteChat(i);
+    };
     item.querySelector(".pin-btn").onclick = event => { event.stopPropagation(); togglePinned(i); };
 
     target.appendChild(item);
@@ -426,10 +440,49 @@ function newChat() {
   closeSidebar();
 }
 
+function deleteChat(index) {
+  if (index < 0 || index >= chats.length) return;
+  chats.splice(index, 1);
+  pinnedChats = pinnedChats.filter(item => item !== index).map(item => item > index ? item - 1 : item);
+  if (currentChatIndex === index) {
+    history = [];
+    currentChatIndex = -1;
+    showEmptyState();
+  } else if (currentChatIndex > index) {
+    currentChatIndex -= 1;
+  }
+  sessionStorage.setItem(PINNED_CHATS_KEY, JSON.stringify(pinnedChats));
+  persistChats();
+  renderChatList();
+}
+
+function deleteAllChats() {
+  if (!chats.length || !confirm("Delete all conversations? This cannot be undone.")) return;
+  chats = [];
+  pinnedChats = [];
+  history = [];
+  currentChatIndex = -1;
+  sessionStorage.removeItem(STORAGE_KEY);
+  sessionStorage.removeItem(PINNED_CHATS_KEY);
+  showEmptyState();
+  renderChatList();
+}
+
 /* ===== INIT ===== */
 loadChatsFromStorage();
 renderChatList();
 setMode(currentMode);   
+
+if (!localStorage.getItem(COOKIE_NOTICE_KEY)) {
+  const cookieNotice = document.getElementById("cookie-notice");
+  if (cookieNotice) cookieNotice.hidden = false;
+}
+
+function acceptCookies() {
+  localStorage.setItem(COOKIE_NOTICE_KEY, "true");
+  const cookieNotice = document.getElementById("cookie-notice");
+  if (cookieNotice) cookieNotice.hidden = true;
+}
 
 document.getElementById("chat-search")?.addEventListener("input", event => {
   chatSearchQuery = event.target.value.trim().toLowerCase();
