@@ -16,7 +16,6 @@ const isSeparateLocalFrontend = window.location.protocol === "file:"
 const CHAT_ENDPOINT = isSeparateLocalFrontend
   ? "http://localhost:3000/chat"
   : "/chat";
-const IMAGE_ENDPOINT = CHAT_ENDPOINT.replace(/\/chat$/, "/generate-image");
 const SIDEBAR_COLLAPSED_KEY = "ayuai_sidebar_collapsed";
 const PINNED_CHATS_KEY = "ayuai_pinned_chats";
 const MEMORY_KEY = "ayuai_memory";
@@ -118,11 +117,6 @@ function showEmptyState() {
   `;
 }
 
-function isImageGenerationRequest(text) {
-  return /\b(generate|create|make|draw|design|illustrate|paint)\b/i.test(text)
-    && /\b(image|picture|photo|illustration|artwork|logo|wallpaper|portrait)\b/i.test(text);
-}
-
 /* ===== SEND ===== */
 async function send() {
   const input = document.getElementById("input");
@@ -141,46 +135,35 @@ async function send() {
   const typingEl = showTypingIndicator();
 
   try {
-    let reply;
-    let imageUrl;
-    if (isImageGenerationRequest(text)) {
-      const res = await fetch(IMAGE_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: text })
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.reply || "Image generation failed.");
-      }
-      imageUrl = URL.createObjectURL(await res.blob());
-      reply = `Generated image: ${text}`;
-    } else {
-      const res = await fetch(CHAT_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: text,
-          mode: currentMode,
-          history,
+    const res = await fetch(CHAT_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: text,
+        mode: currentMode,
+          history: history.filter(item => item.content),
           memory: userMemory
-        })
-      });
+      })
+    });
 
-      const data = await res.json();
-      reply = res.ok ? data.reply : (data.reply || "AyuAI could not process that request.");
-    }
+    const data = await res.json();
+    const reply = res.ok ? data.reply : (data.reply || "AyuAI could not process that request.");
+    const images = res.ok && Array.isArray(data.images) ? data.images.slice(0, 1) : [];
 
-    history.push({ role: "assistant", content: addHighStakesNotice(text, reply) });
+    history.push({
+      role: "assistant",
+      content: images.length ? "" : addHighStakesNotice(text, reply),
+      ...(images.length ? { images } : {})
+    });
 
     typingEl.remove();
-    addMessage(history[history.length - 1].content, "bot-msg", !imageUrl, null, imageUrl);
+    addMessage(history[history.length - 1].content, "bot-msg", !images.length, null, images);
 
     saveChat();
 
-  } catch (error) {
+  } catch {
     typingEl.remove();
-    addMessage(error.message || "⚠️ Error — could not reach AyuAI. Please try again.", "bot-msg");
+    addMessage("⚠️ Error — could not reach AyuAI. Please try again.", "bot-msg");
   } finally {
     if (sendBtn) sendBtn.disabled = false;
   }
@@ -292,9 +275,93 @@ function toggleMessageActions(row) {
 }
 
 /* ===== MESSAGE UI (fast batched reveal — feels instant even for long replies) ===== */
-function addMessage(text, type, animate = false, messageIndex = null, imageUrl = null) {
+function safeImageUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function showImagePreview(image) {
+  const dialog = document.getElementById("image-preview");
+  const preview = document.getElementById("image-preview-image");
+  const caption = document.getElementById("image-preview-caption");
+  const details = document.getElementById("image-preview-details");
+  const source = document.getElementById("image-preview-source");
+  if (!dialog || !preview || !caption || !details || !source) return;
+
+  const imageUrl = safeImageUrl(image.url) || safeImageUrl(image.thumbnail);
+  const sourceUrl = safeImageUrl(image.foreign_landing_url) || imageUrl;
+  if (!imageUrl) return;
+
+  preview.src = imageUrl;
+  preview.alt = image.title || "Image preview";
+  caption.textContent = image.title || "Image preview";
+  details.textContent = [
+    image.creator ? `By ${image.creator}` : "",
+    image.license ? `License: ${image.license}` : "",
+    image.attribution || ""
+  ].filter(Boolean).join(" · ");
+  source.href = sourceUrl;
+  if (typeof dialog.showModal === "function") dialog.showModal();
+  else dialog.setAttribute("open", "");
+}
+
+function closeImagePreview() {
+  const dialog = document.getElementById("image-preview");
+  if (typeof dialog?.close === "function") dialog.close();
+  else dialog?.removeAttribute("open");
+}
+
+function renderImageGallery(images) {
+  if (!images.length) return null;
+
+  const gallery = document.createElement("div");
+  gallery.className = "image-gallery";
+  gallery.setAttribute("aria-label", "Image search results");
+
+  images.slice(0, 1).forEach(image => {
+    const imageUrl = safeImageUrl(image.thumbnail) || safeImageUrl(image.url);
+    if (!imageUrl) return;
+
+    const card = document.createElement("article");
+    card.className = "image-result";
+    const previewButton = document.createElement("button");
+    previewButton.className = "image-preview-button";
+    previewButton.type = "button";
+    previewButton.title = "View larger image";
+    previewButton.setAttribute("aria-label", `View larger image: ${image.title || "Untitled image"}`);
+
+    const img = document.createElement("img");
+    img.src = imageUrl;
+    img.alt = image.title || "Openverse search result";
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.addEventListener("error", () => {
+      const unavailable = document.createElement("span");
+      unavailable.className = "image-unavailable";
+      unavailable.setAttribute("aria-hidden", "true");
+      previewButton.replaceChildren(unavailable);
+      previewButton.disabled = true;
+    }, { once: true });
+    previewButton.addEventListener("click", event => {
+      event.stopPropagation();
+      showImagePreview(image);
+    });
+    previewButton.appendChild(img);
+    card.appendChild(previewButton);
+    gallery.appendChild(card);
+  });
+
+  return gallery.childElementCount ? gallery : null;
+}
+
+function addMessage(text, type, animate = false, messageIndex = null, images = []) {
   const row = document.createElement("div");
   row.className = "message-row " + type;
+  if (images.length && !text) row.classList.add("image-message");
   row.addEventListener("click", event => {
     if (!event.target.closest(".message-action")) toggleMessageActions(row);
   });
@@ -339,33 +406,71 @@ function addMessage(text, type, animate = false, messageIndex = null, imageUrl =
     }
   }
 
-  if (imageUrl) {
-    const image = document.createElement("img");
-    image.className = "generated-image";
-    image.src = imageUrl;
-    image.alt = text;
-    image.loading = "lazy";
-    div.appendChild(image);
+  if (type === "bot-msg") {
+    const gallery = renderImageGallery(images);
+    if (gallery) div.appendChild(gallery);
   }
 
   box.scrollTop = box.scrollHeight;
 }
 
-/* ===== 🎤 VOICE INPUT (ONLY FILLS INPUT, NO AUTO SEND) ===== */
-function startVoice() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+/* ===== VOICE INPUT ===== */
+function updateMicState(state, message = "") {
   const mic = document.querySelector(".mic");
-  if (!SpeechRecognition) {
-    alert("Voice not supported");
+  const status = document.getElementById("voice-status");
+  if (!mic) return;
+
+  mic.classList.toggle("recording", state === "recording");
+  mic.classList.toggle("mic-error", state === "error");
+  const label = state === "recording" ? "Stop voice input" : message || "Voice input";
+  mic.setAttribute("aria-label", label);
+  mic.setAttribute("title", label);
+  if (status) status.textContent = message;
+}
+
+function voiceErrorMessage(error) {
+  const messages = {
+    "not-allowed": "Allow microphone access in your browser settings to use voice input.",
+    "service-not-allowed": "Voice input is blocked by this browser or device.",
+    "audio-capture": "No microphone was found. Check your audio device and try again.",
+    network: "Voice recognition could not connect. Check your connection and try again.",
+    "no-speech": "No speech was detected. Try again when you are ready.",
+    aborted: "Voice input stopped."
+  };
+  return messages[error] || "Voice input could not start. Check microphone permissions and try again.";
+}
+
+async function startVoice() {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Recognition) {
+    updateMicState("error", "Voice input is not supported in this browser.");
     return;
   }
 
   if (activeRecognition) {
-    activeRecognition.stop();
+    const recognition = activeRecognition;
+    recognition.userStopped = true;
+    try { recognition.stop(); } catch { activeRecognition = null; updateMicState("idle"); }
     return;
   }
 
-  const rec = new SpeechRecognition();
+  if (!window.isSecureContext && !["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+    updateMicState("error", "Voice input requires a secure HTTPS connection.");
+    return;
+  }
+
+  try {
+    const permission = await navigator.permissions?.query({ name: "microphone" });
+    if (permission?.state === "denied") {
+      updateMicState("error", "Allow microphone access for this site in your browser settings, then try again.");
+      return;
+    }
+  } catch {
+    // Permission queries are not supported consistently; recognition can still request access.
+  }
+
+  const rec = new Recognition();
+  let receivedSpeech = false;
   rec.lang = "en-US";
   rec.continuous = false;
   rec.interimResults = true;
@@ -373,35 +478,35 @@ function startVoice() {
   activeRecognition = rec;
 
   rec.onstart = () => {
-    mic?.classList.add("recording");
-    mic?.setAttribute("aria-label", "Stop voice input");
-    mic?.setAttribute("title", "Stop voice input");
+    updateMicState("recording");
   };
   rec.onend = () => {
-    activeRecognition = null;
-    mic?.classList.remove("recording");
-    mic?.setAttribute("aria-label", "Voice input");
-    mic?.setAttribute("title", "Voice input");
+    if (activeRecognition === rec) {
+      activeRecognition = null;
+      updateMicState(receivedSpeech || rec.userStopped ? "idle" : "error",
+        receivedSpeech || rec.userStopped ? "" : "No speech was detected. Try again when you are ready.");
+    }
   };
   rec.onerror = (event) => {
-    rec.stop();
-    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-      alert("Allow microphone access in your browser settings to use voice input.");
-    }
+    if (activeRecognition === rec) activeRecognition = null;
+    updateMicState("error", voiceErrorMessage(event.error));
   };
 
   rec.onresult = (e) => {
+    receivedSpeech = true;
     const transcript = Array.from(e.results)
       .map(result => result[0].transcript)
       .join("");
-    document.getElementById("input").value = transcript;
+    const input = document.getElementById("input");
+    if (input) input.value = transcript;
   };
 
   try {
     rec.start();
-  } catch {
+    updateMicState("recording");
+  } catch (error) {
     activeRecognition = null;
-    mic?.classList.remove("recording");
+    updateMicState("error", voiceErrorMessage(error.name === "NotAllowedError" ? "not-allowed" : "start-failed"));
   }
 }
 
@@ -470,14 +575,16 @@ function renderChatList() {
 
 /* ===== LOAD CHAT ===== */
 function loadChat(i) {
-  history = [...chats[i]];
+  history = chats[i].map(message => message.images?.length
+    ? { ...message, content: "" }
+    : message);
   currentChatIndex = i;
 
   const box = document.getElementById("messages");
   box.innerHTML = "";
 
   history.forEach((m, index) => {
-    addMessage(m.content, m.role === "user" ? "user-msg" : "bot-msg", false, m.role === "user" ? index : null);
+    addMessage(m.content, m.role === "user" ? "user-msg" : "bot-msg", false, m.role === "user" ? index : null, m.images || []);
   });
 
   renderChatList();
