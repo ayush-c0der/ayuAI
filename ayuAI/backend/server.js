@@ -2,7 +2,7 @@ const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
 const path = require("path");
-require("dotenv").config();
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const app = express();
 
@@ -99,6 +99,26 @@ const AI_TIMEOUT_MS = 25000;
 
 /* ---------------- API CALLS ---------------- */
 
+async function pollinations(history) {
+  const res = await axios.post(
+    "https://gen.pollinations.ai/v1/chat/completions",
+    {
+      model: process.env.POLLINATIONS_MODEL || "openai/gpt-4o-mini",
+      max_tokens: 700,
+      temperature: 0.7,
+      messages: [SYSTEM_PROMPT, ...history]
+    },
+    {
+      timeout: AI_TIMEOUT_MS,
+      headers: {
+        Authorization: `Bearer ${process.env.POLLINATIONS_API_KEY}`
+      }
+    }
+  );
+
+  return res.data.choices[0].message.content;
+}
+
 // 🔵 OpenRouter
 async function openrouter(history) {
   const res = await axios.post(
@@ -149,6 +169,7 @@ async function groq(history) {
 /* ---------------- MODES ---------------- */
 
 async function efficientMode(history) {
+  try { return await pollinations(history); } catch (e) { logAiError("pollinations", e); }
   try { return await groq(history); } catch (e) { logAiError("groq", e); }
   try { return await openrouter(history); } catch (e) { logAiError("openrouter", e); }
   return "⚠️ All AI services failed. Please try again in a moment.";
@@ -156,13 +177,14 @@ async function efficientMode(history) {
 
 async function smartMode(history) {
   const results = await Promise.allSettled([
+    pollinations(history),
     groq(history),
     openrouter(history)
   ]);
 
   results.forEach((r, i) => {
     if (r.status === "rejected") {
-      logAiError(i === 0 ? "groq" : "openrouter", r.reason);
+      logAiError(["pollinations", "groq", "openrouter"][i], r.reason);
     }
   });
 
@@ -177,6 +199,7 @@ async function smartMode(history) {
 
 async function multiMode(history, api) {
   try {
+    if (api === "pollinations") return await pollinations(history);
     if (api === "groq") return await groq(history);
     if (api === "openrouter") return await openrouter(history);
     return "⚠️ Invalid API selected.";
