@@ -135,6 +135,7 @@ body[data-mode="smart"] .smart-btn.active { border-color: #78a7ff; background: r
 .message-row .bot-msg { align-self: auto; margin: 0; }
 .message-row > .msg.user-msg { background: var(--bubble-user); border-radius: 18px; }
 .message-row > .msg.bot-msg { background: transparent; border-radius: 0; }
+.generated-image { display: block; max-width: min(640px, 80vw); height: auto; margin-top: 12px; border-radius: 10px; }
 .message-actions { display: flex; gap: 2px; margin-top: 2px; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.15s ease, visibility 0.15s ease; }
 .message-row:hover .message-actions, .message-actions:focus-within { opacity: 1; }
 .message-row:hover .message-actions, .message-row.actions-open .message-actions, .message-actions:focus-within { visibility: visible; pointer-events: auto; }

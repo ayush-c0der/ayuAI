@@ -16,6 +16,7 @@ const isSeparateLocalFrontend = window.location.protocol === "file:"
 const CHAT_ENDPOINT = isSeparateLocalFrontend
   ? "http://localhost:3000/chat"
   : "/chat";
+const IMAGE_ENDPOINT = CHAT_ENDPOINT.replace(/\/chat$/, "/generate-image");
 const SIDEBAR_COLLAPSED_KEY = "ayuai_sidebar_collapsed";
 const PINNED_CHATS_KEY = "ayuai_pinned_chats";
 const MEMORY_KEY = "ayuai_memory";
@@ -117,6 +118,11 @@ function showEmptyState() {
   `;
 }
 
+function isImageGenerationRequest(text) {
+  return /\b(generate|create|make|draw|design|illustrate|paint)\b/i.test(text)
+    && /\b(image|picture|photo|illustration|artwork|logo|wallpaper|portrait)\b/i.test(text);
+}
+
 /* ===== SEND ===== */
 async function send() {
   const input = document.getElementById("input");
@@ -135,30 +141,46 @@ async function send() {
   const typingEl = showTypingIndicator();
 
   try {
-    const res = await fetch(CHAT_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: text,
-        mode: currentMode,
-          history: history,
+    let reply;
+    let imageUrl;
+    if (isImageGenerationRequest(text)) {
+      const res = await fetch(IMAGE_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: text })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.reply || "Image generation failed.");
+      }
+      imageUrl = URL.createObjectURL(await res.blob());
+      reply = `Generated image: ${text}`;
+    } else {
+      const res = await fetch(CHAT_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          mode: currentMode,
+          history,
           memory: userMemory
-      })
-    });
+        })
+      });
 
-    const data = await res.json();
-    const reply = res.ok ? data.reply : (data.reply || "AyuAI could not process that request.");
+      const data = await res.json();
+      reply = res.ok ? data.reply : (data.reply || "AyuAI could not process that request.");
+    }
 
     history.push({ role: "assistant", content: addHighStakesNotice(text, reply) });
 
     typingEl.remove();
-    addMessage(history[history.length - 1].content, "bot-msg", true);
+    addMessage(history[history.length - 1].content, "bot-msg", !imageUrl, null, imageUrl);
 
     saveChat();
 
-  } catch {
+  } catch (error) {
     typingEl.remove();
-    addMessage("⚠️ Error — could not reach AyuAI. Please try again.", "bot-msg");
+    addMessage(error.message || "⚠️ Error — could not reach AyuAI. Please try again.", "bot-msg");
   } finally {
     if (sendBtn) sendBtn.disabled = false;
   }
@@ -270,7 +292,7 @@ function toggleMessageActions(row) {
 }
 
 /* ===== MESSAGE UI (fast batched reveal — feels instant even for long replies) ===== */
-function addMessage(text, type, animate = false, messageIndex = null) {
+function addMessage(text, type, animate = false, messageIndex = null, imageUrl = null) {
   const row = document.createElement("div");
   row.className = "message-row " + type;
   row.addEventListener("click", event => {
@@ -315,6 +337,15 @@ function addMessage(text, type, animate = false, messageIndex = null) {
     } else {
       div.innerText = text;
     }
+  }
+
+  if (imageUrl) {
+    const image = document.createElement("img");
+    image.className = "generated-image";
+    image.src = imageUrl;
+    image.alt = text;
+    image.loading = "lazy";
+    div.appendChild(image);
   }
 
   box.scrollTop = box.scrollHeight;

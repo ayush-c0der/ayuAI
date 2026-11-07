@@ -96,6 +96,7 @@ Rules:
 };
 
 const AI_TIMEOUT_MS = 25000;
+const IMAGE_TIMEOUT_MS = 90000;
 
 /* ---------------- API CALLS ---------------- */
 
@@ -225,6 +226,43 @@ function cleanReply(reply) {
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "../frontend", "index.html"));
+});
+
+app.post("/generate-image", rateLimit, async (req, res) => {
+  const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim() : "";
+  if (!prompt || prompt.length > 2000) {
+    return res.status(400).json({ reply: "Please provide an image prompt under 2000 characters." });
+  }
+
+  try {
+    const image = await axios.get(
+      `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}`,
+      {
+        params: {
+          model: process.env.POLLINATIONS_IMAGE_MODEL || "flux",
+          width: 1024,
+          height: 1024
+        },
+        responseType: "arraybuffer",
+        timeout: IMAGE_TIMEOUT_MS,
+        headers: process.env.POLLINATIONS_API_KEY
+          ? { Authorization: `Bearer ${process.env.POLLINATIONS_API_KEY}` }
+          : {}
+      }
+    );
+
+    const contentType = image.headers["content-type"] || "image/png";
+    if (!contentType.startsWith("image/")) {
+      return res.status(502).json({ reply: "The image generator returned an unexpected response." });
+    }
+
+    res.set("Content-Type", contentType);
+    res.set("Cache-Control", "no-store");
+    res.send(Buffer.from(image.data));
+  } catch (err) {
+    logAiError("pollinations-image", err);
+    res.status(502).json({ reply: "Image generation failed. Please try again shortly." });
+  }
 });
 
 app.post("/chat", rateLimit, async (req, res) => {
