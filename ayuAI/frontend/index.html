@@ -1,11 +1,11 @@
 <html>
 <head>
 <title>AyuAI</title>
-<link rel="icon" type="image/svg+xml" href="logo.png">
+<link rel="icon" type="image/svg+xml" href="logo.svg">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
 <meta name="theme-color" content="#171717">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=2.8.10">
 </head>
 
 <body>
@@ -37,19 +37,24 @@
       <div class="sidebar-section-label">Mode</div>
       <div class="mode-buttons">
         <button class="mode-btn efficient-btn" onclick="setMode('efficient')" title="Efficient mode">
-          <span class="mode-icon">⚡</span><span class="mode-label">Efficient</span>
+          <svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13.5 10 4l-.5 7H20l-7 9 .5-6.5H4Z"/></svg><span class="mode-label">Efficient</span>
         </button>
         <button class="mode-btn smart-btn" onclick="setMode('smart')" title="Smart mode">
-          <span class="mode-icon">🧠</span><span class="mode-label">Smart</span>
+          <svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/><path d="m19 15 .9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z"/></svg><span class="mode-label">Smart</span>
         </button>
       </div>
+      <button class="image-feature-btn" type="button" onclick="toggleImageMode()" aria-pressed="false" title="Generate an image">
+        <svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-5-5L5 20"/></svg>
+        <span class="mode-label">Generate image</span>
+        <span class="feature-hint">Generate a visual</span>
+      </button>
     </div>
 
     <div class="sidebar-search" onclick="toggleChatSearch(event)">
       <button class="search-toggle" title="Search chats" aria-label="Search chats" aria-expanded="false">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
       </button>
-      <input id="chat-search" type="search" placeholder="Search chats" aria-label="Search chats">
+      <input id="chat-search" type="search" placeholder="Search conversations" aria-label="Search conversations">
     </div>
 
     <div class="sidebar-section-label pinned-label">Pinned</div>
@@ -87,9 +92,9 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div class="logo">
-        <img src="logo.svg" alt="AyuAI Logo" style="width: 32px; height: 32px; image-rendering: crisp-edges;">
+        <img src="logo.svg" alt="" aria-hidden="true">
         <span>AyuAI</span>
-        <small>2.8.6</small>
+        <small>2.8.10</small>
       
       </div>
     </div>
@@ -102,16 +107,23 @@
 
   <div id="messages">
     <div class="empty-state">
-      <img src="logo.svg" alt="AyuAI Logo" style="width: 32px; height: 32px; image-rendering: crisp-edges;">
+      <img class="empty-logo" src="logo.svg" alt="AyuAI logo">
       <h1>How can I assist you today?</h1>
     </div>
   </div>
 
   <div class="composer">
+    <div id="voice-indicator" class="voice-indicator" hidden aria-hidden="true">
+      <span class="voice-pulse" aria-hidden="true"></span>
+      <span id="voice-label">Listening</span>
+      <span id="voice-transcript" class="voice-transcript"></span>
+      <span class="voice-waveform" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+    </div>
+    <div id="voice-feedback" class="voice-feedback" role="status" aria-live="polite"></div>
     <div class="input-box">
       <input id="input" placeholder="Message AyuAI...">
-      <button type="button" class="mic" onclick="startVoice()" title="Voice input" aria-label="Voice input">
-        <span class="mic-icon"><i></i><i></i><i></i><i></i><i></i></span>
+      <button type="button" class="mic" onclick="startVoice()" title="Voice input" aria-label="Voice input" aria-pressed="false">
+        <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5M9 21.5h6"/></svg>
       </button>
       <button class="send-btn" onclick="send()" title="Send">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
@@ -141,6 +153,6 @@
   </div>
 </dialog>
 
-<script src="script.js"></script>
+<script src="script.js?v=2.8.10"></script>
 </body>
 </html>

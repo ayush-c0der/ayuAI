@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: ayuai
+    runtime: node
+    buildCommand: npm --prefix backend ci --omit=dev
+    startCommand: npm --prefix backend start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENVERSE_CLIENT_ID
+        sync: false
+      - key: OPENVERSE_CLIENT_SECRET
+        sync: false

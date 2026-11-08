@@ -7,6 +7,7 @@ require("dotenv").config();
 const app = express();
 
 /* ---------------- MIDDLEWARE ---------------- */
+app.set("trust proxy", 1);
 app.use(cors());
 app.use(express.json());
 
@@ -29,13 +30,67 @@ function rateLimit(req, res, next) {
   next();
 }
 
-// Static frontend lives one level up, in /frontend. Cache immutable assets to
-// avoid re-downloading the logo, styles, and scripts on repeat visits.
+// Static frontend lives one level up, in /frontend. Revalidate app code after
+// deployments while allowing longer-lived caching for images and other assets.
 app.use(express.static(path.join(__dirname, "../frontend"), {
   maxAge: "1d",
   etag: true,
-  lastModified: true
+  lastModified: true,
+  setHeaders(res, filePath) {
+    if ([".html", ".css", ".js"].includes(path.extname(filePath).toLowerCase())) {
+      res.setHeader("Cache-Control", "no-cache");
+    }
+  }
 }));
+
+app.post("/transcribe", rateLimit, express.raw({
+  type: ["audio/webm", "audio/ogg", "audio/mp4", "audio/wav", "audio/mpeg"],
+  limit: "20mb"
+}), async (req, res) => {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ error: "Voice transcription is unavailable. Configure GROQ_API_KEY on the server." });
+  }
+  if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+    return res.status(400).json({ error: "No voice recording was received." });
+  }
+
+  const contentType = req.get("content-type")?.split(";")[0].trim();
+  const extension = {
+    "audio/webm": "webm",
+    "audio/ogg": "ogg",
+    "audio/mp4": "mp4",
+    "audio/wav": "wav",
+    "audio/mpeg": "mp3"
+  }[contentType];
+  if (!extension) {
+    return res.status(415).json({ error: "This recording format is not supported by the transcription service." });
+  }
+
+  try {
+    const form = new FormData();
+    form.append("file", new Blob([req.body], { type: contentType }), `voice.${extension}`);
+    form.append("model", "whisper-large-v3-turbo");
+    form.append("response_format", "json");
+    const response = await axios.post("https://api.groq.com/openai/v1/audio/transcriptions", form, {
+      timeout: AI_TIMEOUT_MS,
+      headers: { Authorization: `Bearer ${apiKey}` }
+    });
+    const transcript = String(response.data.text || "").trim();
+    if (!transcript) {
+      return res.status(422).json({ error: "No speech was detected. Try speaking a little closer to the microphone." });
+    }
+    return res.json({ transcript });
+  } catch (error) {
+    console.error("[transcription] error:", error.response?.data || error.message);
+    const status = error.response?.status === 429 ? 503 : 502;
+    return res.status(status).json({
+      error: status === 503
+        ? "Voice transcription is busy. Please try again shortly."
+        : "Voice transcription failed. Please try again."
+    });
+  }
+});
 
 /* ---------------- SYSTEM PROMPT ---------------- */
 
@@ -100,6 +155,11 @@ const OPENVERSE_TIMEOUT_MS = 20000;
 const IMAGE_CACHE_TTL_MS = 5 * 60 * 1000;
 const IMAGE_CACHE_MAX_ENTRIES = 100;
 const imageSearchCache = new Map();
+const OPENVERSE_CLIENT_ID = process.env.OPENVERSE_CLIENT_ID?.trim();
+const OPENVERSE_CLIENT_SECRET = process.env.OPENVERSE_CLIENT_SECRET?.trim();
+let openverseAccessToken = "";
+let openverseTokenExpiresAt = 0;
+let openverseTokenRequest = null;
 
 const IMAGE_QUERY_PROMPT = `Convert an image request, including requests phrased as generating an image, into one concise Openverse search query for real existing images. Preserve exact people, places, objects, models, colors, locations, and requested styles. Remove conversational wording. Do not invent details or substitute a different subject. Return only the query, with no quotes or explanation.`;
 
@@ -202,12 +262,13 @@ function hasImageSearchIntent(message, history = []) {
   );
   if (previousVisualRequest) return true;
 
-  const explicitMediaAction = /\b(?:show|display|find|search(?:\s+for)?|look\s+up|pull\s+up|generate)\b.{0,70}\b(?:images?|pictures?|photos?|photographs?)\b/i;
+  const explicitMediaAction = /\b(?:show|display|find|search(?:\s+for)?|look\s+up|pull\s+up|generate|make|create|draw|render)\b.{0,70}\b(?:images?|pictures?|photos?|photographs?)\b/i;
+  const makeVisualRequest = /\b(?:generate|make|create|draw|render)\s+(?:(?:me|us)\s+)?(?:(?:a|an|some)\s+)?(?:images?|pictures?|photos?|photographs?)\b/i;
   const showRequest = /\b(?:show|display)\s+(?:me|us)\b/i;
   const visualRequest = /\b(?:I\s+want\s+to\s+see|I(?:'d|\s+would)\s+like\s+to\s+see|can\s+you\s+show|could\s+you\s+show|let\s+me\s+see|find\s+(?:me\s+)?(?:a|an|some|the)\s+|search\s+for\s+)\b/i;
   const findSubject = /^\s*(?:please\s+)?find\s+(?!out\b)(?!the\s+(?:history|meaning|definition|facts|information|instructions|steps|explanation)\b)(?!\w+\s+(?:history|meaning|definition|facts|information|instructions|steps|explanation)\b)[\w'"-]+(?:\s+[\w'"&-]+){0,8}\s*[.!?]?$/i;
 
-  if (explicitMediaAction.test(text) || showRequest.test(text) || visualRequest.test(text) || findSubject.test(text)) {
+  if (explicitMediaAction.test(text) || makeVisualRequest.test(text) || showRequest.test(text) || visualRequest.test(text) || findSubject.test(text)) {
     return true;
   }
 
@@ -215,7 +276,7 @@ function hasImageSearchIntent(message, history = []) {
 }
 
 function fallbackImageQuery(message, history = []) {
-  if (/^\s*(?:please\s+)?(?:generate|show|find|search for|display)\s+(?:it|that|this|one|another\s+one)\s*[.!?]*$/i.test(message)) {
+  if (/^\s*(?:please\s+)?(?:generate|make|create|draw|render|show|find|search for|display)\s+(?:it|that|this|one|another\s+one)\s*[.!?]*$/i.test(message)) {
     const previousVisualRequest = history.slice(0, -1).reverse().find(item =>
       item.role === "user" && hasImageSearchIntent(item.content)
     );
@@ -225,11 +286,12 @@ function fallbackImageQuery(message, history = []) {
   return String(message || "")
     .replace(/^\s*(?:please\s+)?/i, "")
     .replace(/^(?:can you|could you|would you|please)\s+/i, "")
-    .replace(/^(?:show|display|find|search(?:\s+for)?|look\s+up|pull\s+up|generate)\s+(?:(?:me|us)\s+)?/i, "")
+    .replace(/^(?:show|display|find|search(?:\s+for)?|look\s+up|pull\s+up|generate|make|create|draw|render)\s+(?:(?:me|us)\s+)?/i, "")
     .replace(/^(?:it|that|this|one|another\s+one)\s*[.!?]*$/i, "")
     .replace(/^(?:I\s+want\s+to\s+see|I(?:'d|\s+would)\s+like\s+to\s+see|let\s+me\s+see)\s+/i, "")
+    .replace(/\b(?:an?\s+)?(?:images?|pictures?|photos?|photographs?)\s+(?:of|for)\s+/gi, "")
     .replace(/\b(?:a|an|the|some)\s+(?=\w)/gi, "")
-    .replace(/\b(?:images?|pictures?|photos?|photographs?)\s+(?:of|for)\s+/gi, "")
+    .replace(/^\s*(?:of|for)\s+/i, "")
     .replace(/[?!]+$/g, "")
     .trim()
     .slice(0, 160);
@@ -330,18 +392,105 @@ function cleanAttribution(value) {
     .trim();
 }
 
+function imageRelevanceScore(result, query) {
+  const normalize = value => String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  const normalizedQuery = normalize(query);
+  const normalizedTitle = normalize(result.title);
+  const queryWords = normalizedQuery.split(/\s+/).filter(Boolean);
+  const titleWords = normalizedTitle.split(/\s+/).filter(Boolean);
+  const tagWords = (Array.isArray(result.tags) ? result.tags : [])
+    .map(tag => normalize(tag.name))
+    .filter(Boolean);
+  const exactTag = tagWords.includes(normalizedQuery);
+  const matchedTitleWords = queryWords.filter(word => titleWords.includes(word)).length;
+  const matchedTagWords = queryWords.filter(word =>
+    tagWords.some(tag => tag.split(/\s+/).includes(word))
+  ).length;
+
+  if (normalizedTitle === normalizedQuery) return 1000;
+  if (normalizedTitle.startsWith(`${normalizedQuery} `)) return 800 - titleWords.length;
+  if (exactTag && matchedTitleWords === queryWords.length) return 700 - titleWords.length;
+
+  return matchedTitleWords * 20 + matchedTagWords * 5;
+}
+
+async function getOpenverseAccessToken(forceRefresh = false) {
+  if (!OPENVERSE_CLIENT_ID && !OPENVERSE_CLIENT_SECRET) return "";
+  if (!OPENVERSE_CLIENT_ID || !OPENVERSE_CLIENT_SECRET) {
+    throw new Error("Both OPENVERSE_CLIENT_ID and OPENVERSE_CLIENT_SECRET must be configured.");
+  }
+
+  if (!forceRefresh && openverseAccessToken && openverseTokenExpiresAt > Date.now()) {
+    return openverseAccessToken;
+  }
+  if (openverseTokenRequest) return openverseTokenRequest;
+
+  openverseTokenRequest = axios.post(
+    "https://api.openverse.org/v1/auth_tokens/token/",
+    new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: OPENVERSE_CLIENT_ID,
+      client_secret: OPENVERSE_CLIENT_SECRET
+    }),
+    {
+      timeout: OPENVERSE_TIMEOUT_MS,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded"
+      }
+    }
+  ).then(response => {
+    const token = response.data.access_token;
+    const expiresIn = Number(response.data.expires_in);
+    if (typeof token !== "string" || !token || !Number.isFinite(expiresIn)) {
+      throw new Error("Openverse returned an invalid access token response.");
+    }
+
+    openverseAccessToken = token;
+    openverseTokenExpiresAt = Date.now() + Math.max(0, expiresIn * 1000 - 60_000);
+    return openverseAccessToken;
+  }).finally(() => {
+    openverseTokenRequest = null;
+  });
+
+  return openverseTokenRequest;
+}
+
 async function searchOpenverse(query) {
   const cacheKey = query.toLowerCase().trim();
   const cached = imageSearchCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.images;
   if (cached) imageSearchCache.delete(cacheKey);
 
-  const response = await axios.get("https://api.openverse.org/v1/images/", {
-    params: { q: query, page_size: 1, mature: false },
+  const search = async token => axios.get("https://api.openverse.org/v1/images/", {
+    params: { q: `"${query.replace(/["\\]/g, " ").trim()}"`, page_size: 20, mature: false },
     timeout: OPENVERSE_TIMEOUT_MS,
-    headers: { Accept: "application/json" }
+    headers: {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }
   });
-  const images = (response.data.results || []).map(result => ({
+  let token = await getOpenverseAccessToken();
+  let response;
+  try {
+    response = await search(token);
+  } catch (error) {
+    if (error.response?.status !== 401 || !token) throw error;
+    openverseAccessToken = "";
+    openverseTokenExpiresAt = 0;
+    token = await getOpenverseAccessToken(true);
+    response = await search(token);
+  }
+
+  const images = (response.data.results || [])
+    .map(result => ({ result, relevance: imageRelevanceScore(result, query) }))
+    .filter(item => item.relevance > 0)
+    .sort((a, b) => b.relevance - a.relevance)
+    .slice(0, 1)
+    .map(({ result }) => ({
     title: String(result.title || "Untitled image").slice(0, 300),
     thumbnail: cleanProviderUrl(result.thumbnail),
     url: cleanProviderUrl(result.url),
@@ -377,7 +526,7 @@ app.get("/", (req, res) => {
 });
 
 app.post("/chat", rateLimit, async (req, res) => {
-  const { message, mode, history, api, memory } = req.body || {};
+  const { message, mode, history, api, memory, imageSearch } = req.body || {};
 
   // The frontend always pushes the user's message into `history` before
   // sending, but fall back to just the message if history is missing.
@@ -414,7 +563,7 @@ app.post("/chat", rateLimit, async (req, res) => {
   try {
     const latestUserMessage = [...messages].reverse().find(item => item.role === "user")?.content || "";
 
-    if (hasImageSearchIntent(latestUserMessage, messages)) {
+    if (imageSearch === true || hasImageSearchIntent(latestUserMessage, messages)) {
       const query = await enhanceImageQuery(latestUserMessage, messages, mode, api);
       let images;
       try {
@@ -423,13 +572,13 @@ app.post("/chat", rateLimit, async (req, res) => {
         logAiError("openverse", error);
         const reply = error.response?.status === 429
           ? "Openverse is receiving too many searches right now. Please try again shortly."
-          : "Image search is temporarily unavailable. Please try again in a moment.";
+          : "Image generation is temporarily unavailable. Please try again in a moment.";
         return res.status(error.response?.status === 429 ? 503 : 502).json({ reply, images: [] });
       }
       return res.json({
         reply: images.length
           ? `Here are image results for “${query}”. Check each image's source and license before reuse.`
-          : `I couldn't find relevant images for “${query}”. Try a more specific description.`,
+          : `No matching image appeared for “${query}”. Try a more specific description.`,
         images
       });
     }

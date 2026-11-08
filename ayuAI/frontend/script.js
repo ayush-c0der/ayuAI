@@ -4,10 +4,14 @@ const HIGH_STAKES_NOTICE = "\n\n**Important:** This AI provides informational re
 let chats = [];
 let currentChatIndex = -1;
 let currentMode = "efficient";
+let currentFeature = "chat";
 let chatSearchQuery = "";
 let pinnedChats = [];
 let userMemory = {};
 let activeRecognition = null;
+let activeRecorder = null;
+let activeMediaStream = null;
+let voiceStartPending = false;
 
 const STORAGE_KEY = "ayuai_chats";
 const isSeparateLocalFrontend = window.location.protocol === "file:"
@@ -16,6 +20,9 @@ const isSeparateLocalFrontend = window.location.protocol === "file:"
 const CHAT_ENDPOINT = isSeparateLocalFrontend
   ? "http://localhost:3000/chat"
   : "/chat";
+const TRANSCRIBE_ENDPOINT = isSeparateLocalFrontend
+  ? "http://localhost:3000/transcribe"
+  : "/transcribe";
 const SIDEBAR_COLLAPSED_KEY = "ayuai_sidebar_collapsed";
 const PINNED_CHATS_KEY = "ayuai_pinned_chats";
 const MEMORY_KEY = "ayuai_memory";
@@ -29,7 +36,14 @@ function loadChatsFromStorage() {
   } catch {
     chats = [];
   }
-  try { pinnedChats = JSON.parse(sessionStorage.getItem(PINNED_CHATS_KEY) || "[]"); } catch { pinnedChats = []; }
+  try {
+    const savedPins = JSON.parse(sessionStorage.getItem(PINNED_CHATS_KEY) || "[]");
+    pinnedChats = Array.isArray(savedPins)
+      ? [...new Set(savedPins.filter(index => Number.isInteger(index) && index >= 0 && index < chats.length))]
+      : [];
+  } catch {
+    pinnedChats = [];
+  }
   try { userMemory = JSON.parse(sessionStorage.getItem(MEMORY_KEY) || "{}"); } catch { userMemory = {}; }
 }
 
@@ -45,16 +59,36 @@ function persistChats() {
 function setMode(mode) {
   currentMode = mode;
   document.body.dataset.mode = mode;
+  setImageMode(false);
 
   document.querySelectorAll(".mode-btn").forEach(btn => btn.classList.remove("active"));
   const activeBtn = document.querySelector(
     mode === "smart" ? ".smart-btn" : ".efficient-btn"
   );
   if (activeBtn) activeBtn.classList.add("active");
+  if (window.innerWidth <= 768) closeSidebar();
+}
+
+function setImageMode(enabled) {
+  currentFeature = enabled ? "images" : "chat";
+  const imageButton = document.querySelector(".image-feature-btn");
+  const input = document.getElementById("input");
+  imageButton?.classList.toggle("active", enabled);
+  imageButton?.setAttribute("aria-pressed", String(enabled));
+  if (input) {
+    input.placeholder = enabled
+      ? "Describe the image you want to generate..."
+      : "Message AyuAI...";
+  }
+}
+
+function toggleImageMode() {
+  setImageMode(currentFeature !== "images");
+  if (window.innerWidth <= 768) closeSidebar();
 }
 
 function setTheme(theme) {
-  const selectedTheme = ["dark", "lite", "glass", "neo"].includes(theme) ? theme : "dark";
+  const selectedTheme = ["dark", "lite", "glass", "neo"].includes(theme) ? theme : "glass";
   document.body.dataset.theme = selectedTheme;
   localStorage.setItem(THEME_KEY, selectedTheme);
   document.querySelectorAll(".theme-btn").forEach(button => {
@@ -111,7 +145,7 @@ function showEmptyState() {
   if (!box) return;
   box.innerHTML = `
     <div class="empty-state">
-      <img src="logo.svg" alt="AyuAI Logo" style="width: 32px; height: 32px; image-rendering: crisp-edges;">
+      <img class="empty-logo" src="logo.svg" alt="AyuAI logo">
       <h1>${["How can I help you today?", "What would you like to explore?", "Ready when you are."][Math.floor(Math.random() * 3)]}</h1>
     </div>
   `;
@@ -141,8 +175,9 @@ async function send() {
       body: JSON.stringify({
         message: text,
         mode: currentMode,
-          history: history.filter(item => item.content),
-          memory: userMemory
+        history: history.filter(item => item.content),
+        memory: userMemory,
+        imageSearch: currentFeature === "images"
       })
     });
 
@@ -320,7 +355,7 @@ function renderImageGallery(images) {
 
   const gallery = document.createElement("div");
   gallery.className = "image-gallery";
-  gallery.setAttribute("aria-label", "Image search results");
+  gallery.setAttribute("aria-label", "Generated image results");
 
   images.slice(0, 1).forEach(image => {
     const imageUrl = safeImageUrl(image.thumbnail) || safeImageUrl(image.url);
@@ -418,14 +453,37 @@ function addMessage(text, type, animate = false, messageIndex = null, images = [
 function updateMicState(state, message = "") {
   const mic = document.querySelector(".mic");
   const status = document.getElementById("voice-status");
+  const feedback = document.getElementById("voice-feedback");
+  const indicator = document.getElementById("voice-indicator");
+  const label = document.getElementById("voice-label");
   if (!mic) return;
 
   mic.classList.toggle("recording", state === "recording");
+  mic.classList.toggle("transcribing", state === "transcribing");
   mic.classList.toggle("mic-error", state === "error");
-  const label = state === "recording" ? "Stop voice input" : message || "Voice input";
-  mic.setAttribute("aria-label", label);
-  mic.setAttribute("title", label);
-  if (status) status.textContent = message;
+  const buttonLabel = state === "recording"
+    ? "Stop voice input"
+    : state === "transcribing"
+    ? "Transcribing voice input"
+    : "Voice input";
+  mic.setAttribute("aria-label", buttonLabel);
+  mic.setAttribute("title", buttonLabel);
+  mic.setAttribute("aria-pressed", String(state === "recording"));
+  mic.disabled = state === "transcribing";
+  if (indicator) {
+    indicator.hidden = state !== "recording" && state !== "transcribing";
+    indicator.setAttribute("aria-hidden", String(state !== "recording" && state !== "transcribing"));
+    indicator.classList.toggle("transcribing", state === "transcribing");
+  }
+  if (label) {
+    label.textContent = state === "transcribing" ? "Transcribing" : "Listening";
+  }
+  if (feedback) {
+    feedback.textContent = message;
+    feedback.classList.toggle("visible", Boolean(message) && state !== "recording" && state !== "transcribing");
+    feedback.classList.toggle("error", state === "error");
+  }
+  if (status) status.textContent = message || (state === "recording" ? "Listening. Speak now." : "");
 }
 
 function voiceErrorMessage(error) {
@@ -442,54 +500,79 @@ function voiceErrorMessage(error) {
 
 async function startVoice() {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Recognition) {
-    updateMicState("error", "Voice input is not supported in this browser.");
-    return;
-  }
-
   if (activeRecognition) {
     const recognition = activeRecognition;
     recognition.userStopped = true;
     try { recognition.stop(); } catch { activeRecognition = null; updateMicState("idle"); }
     return;
   }
+  if (activeRecorder) {
+    activeRecorder.stop();
+    return;
+  }
+  if (voiceStartPending || document.querySelector(".mic")?.disabled) return;
+  voiceStartPending = true;
 
   if (!window.isSecureContext && !["localhost", "127.0.0.1"].includes(window.location.hostname)) {
     updateMicState("error", "Voice input requires a secure HTTPS connection.");
+    voiceStartPending = false;
+    return;
+  }
+
+  updateMicState("idle");
+
+  if (!Recognition) {
+    await startRecordedVoice();
+    voiceStartPending = false;
     return;
   }
 
   try {
     const permission = await navigator.permissions?.query({ name: "microphone" });
     if (permission?.state === "denied") {
-      updateMicState("error", "Allow microphone access for this site in your browser settings, then try again.");
+      await startRecordedVoice();
+      voiceStartPending = false;
       return;
     }
   } catch {
-    // Permission queries are not supported consistently; recognition can still request access.
+    // Permission queries are inconsistent; start recognition and fall back if it fails.
   }
 
-  const rec = new Recognition();
+  let rec;
+  try {
+    rec = new Recognition();
+  } catch {
+    await startRecordedVoice();
+    voiceStartPending = false;
+    return;
+  }
   let receivedSpeech = false;
-  rec.lang = "en-US";
+  rec.lang = navigator.language || "en-US";
   rec.continuous = false;
   rec.interimResults = true;
   rec.maxAlternatives = 1;
   activeRecognition = rec;
 
   rec.onstart = () => {
+    const preview = document.getElementById("voice-transcript");
+    if (preview) preview.textContent = "";
     updateMicState("recording");
   };
   rec.onend = () => {
     if (activeRecognition === rec) {
       activeRecognition = null;
       updateMicState(receivedSpeech || rec.userStopped ? "idle" : "error",
-        receivedSpeech || rec.userStopped ? "" : "No speech was detected. Try again when you are ready.");
+        receivedSpeech ? "Voice input captured." : rec.userStopped ? "" : "No speech was detected. Try again when you are ready.");
     }
   };
   rec.onerror = (event) => {
     if (activeRecognition === rec) activeRecognition = null;
-    updateMicState("error", voiceErrorMessage(event.error));
+    if (["network", "service-not-allowed", "language-not-supported", "no-speech"].includes(event.error)) {
+      updateMicState("recording", "Switching to secure voice recording...");
+      window.setTimeout(() => startRecordedVoice(), 0);
+    } else {
+      updateMicState("error", voiceErrorMessage(event.error));
+    }
   };
 
   rec.onresult = (e) => {
@@ -499,6 +582,8 @@ async function startVoice() {
       .join("");
     const input = document.getElementById("input");
     if (input) input.value = transcript;
+    const preview = document.getElementById("voice-transcript");
+    if (preview) preview.textContent = transcript;
   };
 
   try {
@@ -506,7 +591,83 @@ async function startVoice() {
     updateMicState("recording");
   } catch (error) {
     activeRecognition = null;
-    updateMicState("error", voiceErrorMessage(error.name === "NotAllowedError" ? "not-allowed" : "start-failed"));
+    if (["NotAllowedError", "InvalidStateError"].includes(error.name)) {
+      await startRecordedVoice();
+    } else {
+      updateMicState("error", voiceErrorMessage(error.name === "NotAllowedError" ? "not-allowed" : "start-failed"));
+    }
+  }
+  voiceStartPending = false;
+}
+
+async function startRecordedVoice() {
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    updateMicState("error", "Voice input is not supported on this browser. Try a current version of Chrome, Edge, or Safari.");
+    return;
+  }
+
+  try {
+    activeMediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+    const preferredTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+    const mimeType = preferredTypes.find(type => MediaRecorder.isTypeSupported(type));
+    const recorder = new MediaRecorder(activeMediaStream, mimeType ? { mimeType } : undefined);
+    const chunks = [];
+    activeRecorder = recorder;
+    const preview = document.getElementById("voice-transcript");
+    if (preview) preview.textContent = "";
+    recorder.ondataavailable = event => {
+      if (event.data.size) chunks.push(event.data);
+    };
+    recorder.onerror = () => {
+      if (activeRecorder === recorder) activeRecorder = null;
+      activeMediaStream?.getTracks().forEach(track => track.stop());
+      activeMediaStream = null;
+      updateMicState("error", "Microphone recording failed. Check your microphone and try again.");
+    };
+    recorder.onstop = async () => {
+      if (activeRecorder === recorder) activeRecorder = null;
+      activeMediaStream?.getTracks().forEach(track => track.stop());
+      activeMediaStream = null;
+      const recording = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+      if (!recording.size) {
+        updateMicState("error", "No voice was recorded. Tap the microphone and try again.");
+        return;
+      }
+
+      updateMicState("transcribing");
+      try {
+        const response = await fetch(TRANSCRIBE_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": recording.type.split(";")[0] },
+          body: recording
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Voice transcription failed. Please try again.");
+        const transcript = String(data.transcript || "").trim();
+        if (!transcript) throw new Error("No speech was detected. Try speaking a little closer to the microphone.");
+        const input = document.getElementById("input");
+        if (input) input.value = transcript;
+        const preview = document.getElementById("voice-transcript");
+        if (preview) preview.textContent = transcript;
+        updateMicState("idle", "Voice input captured.");
+      } catch (error) {
+        updateMicState("error", error.message || "Voice transcription failed. Please try again.");
+      }
+    };
+
+    recorder.start(250);
+    updateMicState("recording", "Listening. Tap the microphone again when you are done.");
+  } catch (error) {
+    activeMediaStream?.getTracks().forEach(track => track.stop());
+    activeMediaStream = null;
+    const reason = error.name === "NotAllowedError" || error.name === "SecurityError"
+      ? "Allow microphone access in your browser settings to use voice input."
+      : error.name === "NotFoundError"
+      ? "No microphone was found. Check your audio device and try again."
+      : "Could not access the microphone. Check its permissions and try again.";
+    updateMicState("error", reason);
   }
 }
 
@@ -539,10 +700,11 @@ function renderChatList() {
   list.innerHTML = "";
   if (pinnedList) pinnedList.innerHTML = "";
 
-  if (chats.length === 0 || !chats.some(chat => {
-    const title = chat[0]?.content || "New Chat";
-    return !chatSearchQuery || title.toLowerCase().includes(chatSearchQuery);
-  })) {
+  const normalizedQuery = chatSearchQuery.trim().toLocaleLowerCase();
+  const matchesQuery = chat => !normalizedQuery || chat.some(message =>
+    String(message.content || "").toLocaleLowerCase().includes(normalizedQuery)
+  );
+  if (chats.length === 0 || !chats.some(matchesQuery)) {
     const empty = document.createElement("div");
     empty.className = "chat-list-empty";
     empty.innerText = chats.length === 0 ? "No chats yet" : "No matching chats";
@@ -552,10 +714,11 @@ function renderChatList() {
 
   const renderItem = (chat, i, target) => {
     const title = chat[0]?.content || "New Chat";
-    if (chatSearchQuery && !title.toLowerCase().includes(chatSearchQuery)) return;
+    if (!matchesQuery(chat)) return;
     const item = document.createElement("div");
     item.className = "chat-item" + (i === currentChatIndex ? " active" : "");
-    item.innerHTML = `<span class="chat-number">${i + 1}</span><span class="chat-title"></span><button class="pin-btn" title="${pinnedChats.includes(i) ? "Unpin" : "Pin"} chat" aria-label="${pinnedChats.includes(i) ? "Unpin" : "Pin"} chat">${pinnedChats.includes(i) ? "★" : "☆"}</button>`;
+    const isPinned = pinnedChats.includes(i);
+    item.innerHTML = `<span class="chat-number">${i + 1}</span><svg class="chat-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H6l-3 2v-6a7.5 7.5 0 1 1 17-3.5Z"/><path d="M8 10h8M8 14h5"/></svg><span class="chat-title"></span><button class="pin-btn" type="button" title="${isPinned ? "Unpin" : "Pin"} chat" aria-label="${isPinned ? "Unpin" : "Pin"} chat" aria-pressed="${isPinned}">${isPinned ? "★" : "☆"}</button>`;
     item.querySelector(".chat-title").textContent = title.slice(0, 26);
 
     item.onclick = () => loadChat(i);
@@ -575,6 +738,7 @@ function renderChatList() {
 
 /* ===== LOAD CHAT ===== */
 function loadChat(i) {
+  setImageMode(false);
   history = chats[i].map(message => message.images?.length
     ? { ...message, content: "" }
     : message);
@@ -593,6 +757,7 @@ function loadChat(i) {
 
 /* ===== NEW CHAT ===== */
 function newChat() {
+  setImageMode(false);
   history = [];
   currentChatIndex = -1;
 
@@ -633,7 +798,7 @@ function deleteAllChats() {
 loadChatsFromStorage();
 renderChatList();
 setMode(currentMode);   
-setTheme(localStorage.getItem(THEME_KEY) || "dark");
+setTheme(localStorage.getItem(THEME_KEY) || "glass");
 
 if (!localStorage.getItem(COOKIE_NOTICE_KEY)) {
   const cookieNotice = document.getElementById("cookie-notice");
@@ -647,8 +812,27 @@ function acceptCookies() {
 }
 
 document.getElementById("chat-search")?.addEventListener("input", event => {
-  chatSearchQuery = event.target.value.trim().toLowerCase();
+  chatSearchQuery = event.currentTarget.value;
   renderChatList();
+});
+document.getElementById("chat-search")?.addEventListener("keydown", event => {
+  if (event.key === "Escape") {
+    event.currentTarget.value = "";
+    chatSearchQuery = "";
+    renderChatList();
+    event.currentTarget.blur();
+  }
+});
+document.addEventListener("keydown", event => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    const search = document.getElementById("chat-search");
+    const container = document.querySelector(".sidebar-search");
+    if (!search || !container) return;
+    container.classList.add("open");
+    document.querySelector(".search-toggle")?.setAttribute("aria-expanded", "true");
+    search.focus();
+  }
 });
 
 document.getElementById("compact-setting")?.addEventListener("change", event => {
@@ -689,7 +873,11 @@ function togglePinned(index) {
   pinnedChats = pinnedChats.includes(index)
     ? pinnedChats.filter(item => item !== index)
     : [...pinnedChats, index];
-  sessionStorage.setItem(PINNED_CHATS_KEY, JSON.stringify(pinnedChats));
+  try {
+    sessionStorage.setItem(PINNED_CHATS_KEY, JSON.stringify(pinnedChats));
+  } catch (error) {
+    console.error("Could not save pinned chats:", error);
+  }
   renderChatList();
 }
 
